@@ -21,6 +21,10 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebChromeClient;
+import android.webkit.ConsoleMessage;
+import android.util.Log;
 import android.widget.FrameLayout;
 import android.widget.MediaController;
 import android.widget.TextView;
@@ -57,6 +61,12 @@ public class GlassActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         web.setBackgroundColor(0xFF080B12);
         web.addJavascriptInterface(new Bridge(), "AuraNative");
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage message) {
+                Log.d("AURA_WEB", message.messageLevel() + ": " + message.message());
+                return true;
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
@@ -68,13 +78,23 @@ public class GlassActivity extends Activity {
                     path = path == null || path.equals("/") ? "index.html" : path.replaceFirst("^/", "");
                     if (path.contains("..")) return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
                     InputStream stream = getAssets().open(path);
+                    Log.d("AURA_WEB", "Asset " + path);
                     String mime = URLConnection.guessContentTypeFromName(path);
                     if (path.endsWith(".js")) mime = "application/javascript";
                     if (path.endsWith(".css")) mime = "text/css";
                     return new WebResourceResponse(mime == null ? "application/octet-stream" : mime, "UTF-8", stream);
-                } catch (Exception ignored) {
+                } catch (Exception error) {
+                    Log.e("AURA_WEB", "Asset failed: " + uri, error);
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
                 }
+            }
+            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                Log.e("AURA_WEB", "WebView error " + request.getUrl() + " " + error.getDescription());
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                new android.os.Handler(getMainLooper()).postDelayed(() ->
+                    web.evaluateJavascript("document.getElementById('root')?.innerHTML.length ?? -1",
+                        result -> Log.d("AURA_WEB", "Root length " + result)), 8000);
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return !"aura.local".equals(request.getUrl().getHost());
@@ -82,7 +102,12 @@ public class GlassActivity extends Activity {
         });
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
-        web.loadUrl(ORIGIN + "/index.html");
+        try (InputStream input = getAssets().open("index.html")) {
+            byte[] bytes = new byte[input.available()];
+            int size = input.read(bytes);
+            web.loadDataWithBaseURL(ORIGIN + "/", new String(bytes, 0, size, java.nio.charset.StandardCharsets.UTF_8),
+                "text/html", "UTF-8", null);
+        } catch (Exception error) { Log.e("AURA_WEB", "Could not open interface", error); }
         requestMedia();
     }
 

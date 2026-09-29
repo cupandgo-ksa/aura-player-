@@ -60,8 +60,8 @@ jobs:
             adb shell am start -n com.auraplayer.offline/.GlassActivity
             sleep 12
             adb exec-out screencap -p > glass-smoke.png
-            adb logcat -d -s AndroidRuntime:E chromium:E > glass-smoke.log
-            if grep -q 'FATAL EXCEPTION' glass-smoke.log; then cat glass-smoke.log; exit 1; fi
+            adb logcat -d -s AndroidRuntime:E chromium:E AURA_WEB:V > glass-smoke.log
+            if grep -qE 'FATAL EXCEPTION|Root length 0|Root length -1|Asset failed|WebView error' glass-smoke.log; then cat glass-smoke.log; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
