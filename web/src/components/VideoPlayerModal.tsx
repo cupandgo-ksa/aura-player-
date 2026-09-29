@@ -20,7 +20,6 @@ import {
   Ratio,
   Maximize,
   Minimize,
-  Tv,
   Eye,
   Settings2,
 } from 'lucide-react';
