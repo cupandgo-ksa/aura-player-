@@ -239,10 +239,7 @@ export const AudioTab: React.FC<AudioTabProps> = ({
         <span>
           {filteredTracks.length} {lang === 'bn' ? 'টি অফলাইন গান' : 'Offline Tracks'}
         </span>
-        <span className="flex items-center gap-1 text-[11px] text-purple-300">
-          <Sparkles className="w-3 h-3" />
-          {lang === 'bn' ? '১০০% বিজ্ঞাপন মুক্ত প্লেয়ার' : '100% Ad-Free Experience'}
-        </span>
+
       </div>
 
       {/* Track List */}

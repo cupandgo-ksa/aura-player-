@@ -23,6 +23,7 @@ import {
   Tag,
   Radio,
   HardDrive,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Track, RepeatMode } from '../types/media';
 import { NowPlayingVisualizer } from './NowPlayingVisualizer';
@@ -84,6 +85,15 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'art' | 'visualizer' | 'lyrics' | 'queue'>('art');
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [artStyle, setArtStyle] = useState<'vinyl' | 'cover' | 'glow'>(() => {
+    const saved = localStorage.getItem('as-media-art-style');
+    return saved === 'cover' || saved === 'glow' ? saved : 'vinyl';
+  });
+  const [showArtStyles, setShowArtStyles] = useState(false);
+  const chooseArtStyle = (style: 'vinyl' | 'cover' | 'glow') => {
+    setArtStyle(style); localStorage.setItem('as-media-art-style', style);
+    setActiveTab('art'); setShowArtStyles(false);
+  };
 
   if (!isOpen || !currentTrack) return null;
 
@@ -120,7 +130,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
               {lang === 'bn' ? 'এখন চলছে' : 'NOW PLAYING'}
             </span>
             <p className="text-xs text-slate-400 font-medium">
-              {currentTrack.album || 'Aura Glass Collection'}
+              {currentTrack.album || (lang === 'bn' ? 'আমার গান' : 'My music')}
             </p>
           </div>
 
@@ -190,9 +200,19 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
           </button>
         </div>
 
+        <div className="relative flex justify-end">
+          <button onClick={() => setShowArtStyles(!showArtStyles)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/20 bg-white/10 text-xs text-slate-200" aria-label={lang === 'bn' ? 'কভার স্টাইল বদলান' : 'Change cover style'}>
+            <ImageIcon className="w-3.5 h-3.5" /> {lang === 'bn' ? 'কভার স্টাইল' : 'Cover style'}
+          </button>
+          {showArtStyles && <div className="absolute right-0 top-9 z-10 w-40 p-1.5 rounded-2xl bg-[#252b3c]/95 border border-white/20 shadow-2xl backdrop-blur-xl">
+            {(['vinyl', 'cover', 'glow'] as const).map((style) => <button key={style} onClick={() => chooseArtStyle(style)} className={`block w-full text-left rounded-xl px-3 py-2 text-sm ${artStyle === style ? 'bg-white/20 text-white' : 'text-slate-300 hover:bg-white/10'}`}>
+              {style === 'vinyl' ? (lang === 'bn' ? 'ভিনাইল' : 'Vinyl') : style === 'cover' ? (lang === 'bn' ? 'স্কয়ার কভার' : 'Square cover') : (lang === 'bn' ? 'সফ্ট গ্লো' : 'Soft glow')}
+            </button>)}
+          </div>}
+        </div>
         {/* Center Main Stage */}
         <div className="my-auto py-3 flex items-center justify-center min-h-[260px]">
-          {activeTab === 'art' && (
+          {activeTab === 'art' && artStyle === 'vinyl' && (
             <div className="relative group flex items-center justify-center">
               {/* Outer soft glass glow halo */}
               <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-purple-500 to-cyan-500 opacity-20 blur-2xl group-hover:opacity-30 transition" />
@@ -225,6 +245,8 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
             </div>
           )}
 
+          {activeTab === 'art' && artStyle === 'cover' && <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-[28px] overflow-hidden border border-white/25 shadow-2xl bg-white/10"><img src={currentTrack.coverUrl} alt={currentTrack.title} className="w-full h-full object-cover" /></div>}
+          {activeTab === 'art' && artStyle === 'glow' && <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center"><img src={currentTrack.coverUrl} alt="" className="absolute inset-2 w-[95%] h-[95%] object-cover blur-3xl opacity-50 rounded-full" /><img src={currentTrack.coverUrl} alt={currentTrack.title} className="relative w-52 h-52 sm:w-60 sm:h-60 object-cover rounded-[36px] border border-white/35 shadow-2xl" /></div>}
           {activeTab === 'visualizer' && (
             <div className="w-full">
               <NowPlayingVisualizer
