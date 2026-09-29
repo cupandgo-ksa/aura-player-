@@ -1,6 +1,6 @@
 {
-  "name": "A S Media Player",
-  "short_name": "A S Media Player",
+  "name": "A S media-player",
+  "short_name": "A S media-player",
   "description": "Local audio and video player with background playback.",
   "start_url": "/",
   "display": "standalone",
