@@ -76,7 +76,7 @@ public class PremiumActivity extends Activity {
     private LinearLayout homeList, playerRoot, playerControls, playerTop;
     private FrameLayout stage;
     private VideoView video;
-    private MediaPlayer audio, videoEngine;
+    private MediaPlayer videoEngine;
     private TextView playerTitle, time, captionView, countView, gestureHint, miniTitle;
     private Button play, miniPlay, tabVideo, tabAudio, folderButton, lockButton;
     private SeekBar progress;
@@ -84,13 +84,22 @@ public class PremiumActivity extends Activity {
     private ImageView playerArt, ambientArt;
     private int active = -1, theme, tab = 0, sortMode = 0, resumePosition, collectionMode = 0;
     private String groupFilter = "";
-    private boolean onPlayer, audioReady, videoReady, repeat, shuffle, locked, fullscreen, scrubbing, enteringPip;
+    private boolean onPlayer, videoReady, repeat, shuffle, locked, fullscreen, scrubbing, enteringPip;
+    private String pendingAudioUri = "";
     private boolean keepPlayingAfterTheme;
     private float speed = 1f, downX, downY, startBrightness;
     private int startVolume, startPosition;
     private String folder = "All", query = "";
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
+            AudioService service = AudioService.instance;
+            if (service != null && !service.uri.isEmpty() && (active < 0 || !media.get(active).uri.equals(service.uri))) {
+                for (int i = 0; i < media.size(); i++) if (media.get(i).uri.equals(service.uri)) {
+                    active = i;
+                    if (onPlayer) showPlayer(); else showHome();
+                    break;
+                }
+            }
             int at = position(), total = duration();
             if (progress != null && !scrubbing) { progress.setMax(Math.max(1, total)); progress.setProgress(at); }
             if (time != null) time.setText(format(at) + "  /  " + format(total));
@@ -416,9 +425,9 @@ public class PremiumActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("AURA themes").setSingleChoiceItems(THEMES, theme,
             (d, which) -> {
                 if (theme != which) {
-                    keepPlayingAfterTheme = isPlaying(); savePosition(); release();
+                    keepPlayingAfterTheme = isPlaying(); savePosition();
                     theme = which; getPreferences(0).edit().putInt("theme", theme).apply();
-                    showHome(); if (active >= 0) prepare(active, keepPlayingAfterTheme);
+                    if (onPlayer) showPlayer(); else showHome();
                 }
                 d.dismiss();
             }).show();
@@ -560,13 +569,15 @@ public class PremiumActivity extends Activity {
         release(); active = id;
         resumePosition = getPreferences(0).getInt("pos_" + media.get(id).uri.hashCode(), 0);
         if (miniBar != null && !onPlayer) {
-            miniBar.setVisibility(View.VISIBLE); miniTitle.setText(media.get(id).name);
+            miniBar.setVisibility(View.VISIBLE);
+            if (miniTitle != null) miniTitle.setText(media.get(id).name);
         }
         if (playerTitle != null) playerTitle.setText("NOW PLAYING");
         captions.clear(); if (captionView != null) captionView.setText("");
         Uri uri = Uri.parse(media.get(id).uri);
         try {
             if (media.get(id).video) {
+                if (AudioService.instance != null) startService(new Intent(this, AudioService.class).setAction(AudioService.STOP));
                 if (video == null) return;
                 video.setVisibility(View.VISIBLE);
                 video.setOnPreparedListener(mp -> {
@@ -579,15 +590,18 @@ public class PremiumActivity extends Activity {
                 video.setVideoURI(uri);
             } else {
                 if (video != null) video.setVisibility(View.GONE);
-                audio = new MediaPlayer(); audio.setAudioStreamType(AudioManager.STREAM_MUSIC);
-                audio.setDataSource(this, uri);
-                audio.setOnPreparedListener(mp -> {
-                    audioReady = true; mp.seekTo(resumePosition);
-                    if (auto) { mp.start(); applySpeed(); }
-                });
-                audio.setOnCompletionListener(mp -> completed());
-                audio.setOnErrorListener((mp, what, extra) -> { error(); return true; });
-                audio.prepareAsync();
+                JSONArray queue = new JSONArray();
+                for (Entry item : media) if (!item.video) {
+                    JSONObject track = new JSONObject();
+                    track.put("uri", item.uri); track.put("title", item.name); track.put("artist", item.artist);
+                    queue.put(track);
+                }
+                pendingAudioUri = uri.toString();
+                Intent command = new Intent(this, AudioService.class).setAction(AudioService.PLAY)
+                    .putExtra("uri", pendingAudioUri).putExtra("title", media.get(id).name)
+                    .putExtra("artist", media.get(id).artist).putExtra("position", resumePosition)
+                    .putExtra("queue", queue.toString());
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(command); else startService(command);
             }
         } catch (Exception ex) { error(); }
     }
@@ -684,7 +698,8 @@ public class PremiumActivity extends Activity {
         inRow(transport, play, 1.4f, 70);
         inRow(transport, plainButton("▶|", this::next, 25), 1, 62);
         inRow(transport, plainButton("≡", this::queueDialog, 29), 1, 62);
-        if (audio == null && !videoReady) prepare(active, true);
+        if (!e.video && !e.uri.equals(pendingAudioUri) &&
+            (AudioService.instance == null || !e.uri.equals(AudioService.instance.uri))) prepare(active, true);
         else if (e.video && video != null && videoEngine == null) prepare(active, true);
     }
     private Button favoriteButton;
@@ -740,7 +755,11 @@ public class PremiumActivity extends Activity {
     }
     private void applySpeed() {
         try {
-            MediaPlayer mp = audioReady ? audio : videoReady ? videoEngine : null;
+            if (active >= 0 && !media.get(active).video) {
+                if (AudioService.instance != null) AudioService.instance.speed(speed);
+                return;
+            }
+            MediaPlayer mp = videoReady ? videoEngine : null;
             if (mp == null) return;
             boolean playing = mp.isPlaying();
             mp.setPlaybackParams(new PlaybackParams().setSpeed(speed));
@@ -851,18 +870,22 @@ public class PremiumActivity extends Activity {
     private void toast(String message) { Toast.makeText(this, message, Toast.LENGTH_SHORT).show(); }
     private void completed() {
         if (active >= 0) getPreferences(0).edit().putInt("pos_" + media.get(active).uri.hashCode(), 0).apply();
-        if (repeat) { jump(0); if (audioReady) audio.start(); else if (videoReady) video.start(); }
+        if (repeat) { jump(0); if (videoReady) video.start(); }
         else next();
     }
     private void toggle() {
         if (active < 0) return;
         try {
-            if (audioReady) { if (audio.isPlaying()) audio.pause(); else { audio.start(); applySpeed(); } }
-            else if (videoReady) { if (video.isPlaying()) video.pause(); else { video.start(); applySpeed(); } }
+            if (!media.get(active).video) {
+                if (AudioService.instance != null) AudioService.instance.toggle();
+            } else if (videoReady) { if (video.isPlaying()) video.pause(); else { video.start(); applySpeed(); } }
         } catch (Exception ignored) { }
     }
     private void next() {
         if (media.isEmpty()) return;
+        if (active >= 0 && !media.get(active).video && AudioService.instance != null) {
+            AudioService.instance.next(); return;
+        }
         int selected = -1;
         if (shuffle && media.size() > 1) {
             selected = random.nextInt(media.size() - 1);
@@ -877,6 +900,9 @@ public class PremiumActivity extends Activity {
     }
     private void previous() {
         if (active < 0) return;
+        if (!media.get(active).video && AudioService.instance != null) {
+            AudioService.instance.previous(); return;
+        }
         for (int n = active - 1; n >= 0; n--) if (media.get(n).video == media.get(active).video) {
             if (onPlayer) { savePosition(); release(); active = n; showPlayer(); }
             else { prepare(n, true); refreshHome(); }
@@ -886,19 +912,23 @@ public class PremiumActivity extends Activity {
     }
     private void jump(int ms) {
         int target = Math.max(0, Math.min(duration(), ms));
-        try { if (audioReady) audio.seekTo(target); else if (videoReady) video.seekTo(target); }
+        try { if (active >= 0 && !media.get(active).video && AudioService.instance != null) AudioService.instance.seek(target);
+            else if (videoReady) video.seekTo(target); }
         catch (Exception ignored) { }
     }
     private int position() {
-        try { return audioReady ? audio.getCurrentPosition() : videoReady && video != null ? video.getCurrentPosition() : 0; }
+        try { return active >= 0 && !media.get(active).video && AudioService.instance != null ? AudioService.instance.position()
+            : videoReady && video != null ? video.getCurrentPosition() : 0; }
         catch (Exception ex) { return 0; }
     }
     private int duration() {
-        try { return Math.max(0, audioReady ? audio.getDuration() : videoReady && video != null ? video.getDuration() : 0); }
+        try { return Math.max(0, active >= 0 && !media.get(active).video && AudioService.instance != null ? AudioService.instance.duration()
+            : videoReady && video != null ? video.getDuration() : 0); }
         catch (Exception ex) { return 0; }
     }
     private boolean isPlaying() {
-        try { return audioReady ? audio.isPlaying() : videoReady && video != null && video.isPlaying(); }
+        try { return active >= 0 && !media.get(active).video && AudioService.instance != null ? AudioService.instance.isPlaying()
+            : videoReady && video != null && video.isPlaying(); }
         catch (Exception ex) { return false; }
     }
     private String format(int ms) {
@@ -911,9 +941,8 @@ public class PremiumActivity extends Activity {
             getPreferences(0).edit().putInt("pos_" + media.get(active).uri.hashCode(), position()).apply();
     }
     private void release() {
-        videoReady = false; videoEngine = null; audioReady = false;
+        videoReady = false; videoEngine = null;
         if (video != null) video.stopPlayback();
-        if (audio != null) { audio.release(); audio = null; }
     }
     @Override public void onBackPressed() {
         if (locked) { setLocked(false); return; }
@@ -923,7 +952,6 @@ public class PremiumActivity extends Activity {
     }
     @Override protected void onPause() {
         super.onPause(); savePosition();
-        if (audioReady && audio.isPlaying()) audio.pause();
         if (videoReady && video != null && video.isPlaying() &&
             (Build.VERSION.SDK_INT < 26 || (!isInPictureInPictureMode() && !enteringPip))) video.pause();
     }
