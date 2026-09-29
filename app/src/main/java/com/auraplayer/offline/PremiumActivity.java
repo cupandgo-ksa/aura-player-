@@ -175,7 +175,7 @@ public class PremiumActivity extends Activity {
         LinearLayout body = column(); padded(body, 19, 14); scroll.addView(body);
 
         LinearLayout heading = row(); body.addView(heading);
-        TextView logo = text("AURA", 22, true, Color.WHITE);
+        TextView logo = text("AURA  /  MUSIC", 19, true, Color.WHITE);
         logo.setLetterSpacing(.16f); heading.addView(logo, new LinearLayout.LayoutParams(0, dp(42), 1));
         Button settings = plainButton("⋮", this::homeMenu, 26);
         heading.addView(settings, new LinearLayout.LayoutParams(dp(44), dp(44)));
@@ -196,9 +196,9 @@ public class PremiumActivity extends Activity {
         addSpace(body, 19);
 
         LinearLayout shortcuts = row(); body.addView(shortcuts);
-        shortcut(shortcuts, "♡", "Favorites", () -> { collectionMode = 1; groupFilter = ""; refreshHome(); });
-        shortcut(shortcuts, "◷", "Recent", () -> { collectionMode = 2; groupFilter = ""; refreshHome(); });
-        shortcut(shortcuts, "▤", "Folders", this::chooseFolder);
+        shortcut(shortcuts, "♡", "Favorites", 0xFF703A57, () -> { collectionMode = 1; groupFilter = ""; refreshHome(); });
+        shortcut(shortcuts, "◷", "Recent", 0xFF36566A, () -> { collectionMode = 2; groupFilter = ""; refreshHome(); });
+        shortcut(shortcuts, "▤", "Folders", 0xFF5B524B, this::chooseFolder);
         addSpace(body, 18);
 
         LinearLayout tabs = row(); body.addView(tabs);
@@ -227,9 +227,9 @@ public class PremiumActivity extends Activity {
         Button b = button(value, action); b.setTextSize(size); b.setBackgroundColor(Color.TRANSPARENT);
         b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(0, 0, 0, 0); return b;
     }
-    private void shortcut(LinearLayout parent, String icon, String label, Runnable action) {
+    private void shortcut(LinearLayout parent, String icon, String label, int color, Runnable action) {
         LinearLayout card = column(); card.setGravity(Gravity.CENTER_VERTICAL); padded(card, 11, 9);
-        card.setBackground(glass(0x1BFFFFFF, 16, 0x13FFFFFF));
+        card.setBackground(glass(color, 17, 0x24FFFFFF));
         card.addView(text(icon, 24, false, Color.WHITE));
         card.addView(text(label, 12, true, 0xFFE8E8E8));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(88), 1);
@@ -295,6 +295,7 @@ public class PremiumActivity extends Activity {
             LinearLayout item = row(); item.setPadding(dp(2), dp(8), dp(2), dp(8));
             ImageView art = new ImageView(this); art.setScaleType(ImageView.ScaleType.CENTER_CROP);
             art.setBackground(glass(0xFF292929, 7, 0));
+            art.setClipToOutline(true);
             item.addView(art, new LinearLayout.LayoutParams(dp(53), dp(53)));
             loadArt(art, e);
             LinearLayout info = column(); info.setPadding(dp(12), dp(3), dp(4), 0);
@@ -636,6 +637,7 @@ public class PremiumActivity extends Activity {
         int albumSize = Math.min(width - dp(44), dp(380));
         int stageHeight = e.video ? Math.round(albumSize * .62f) : albumSize;
         stage = new FrameLayout(this); stage.setBackground(glass(0xFF181818, 15, 0x19FFFFFF));
+        stage.setClipToOutline(true);
         LinearLayout.LayoutParams stageParams = new LinearLayout.LayoutParams(-1, stageHeight);
         stageParams.setMargins(dp(22), 0, dp(22), 0); playerRoot.addView(stage, stageParams);
         if (e.video) {
