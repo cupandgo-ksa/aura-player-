@@ -1,5 +1,5 @@
 import React from 'react';
-import { Music, Video, ListMusic, FolderOpen, Sliders } from 'lucide-react';
+import { Music, ListMusic, FolderOpen, Sliders } from 'lucide-react';
 import { MainTab } from '../types/media';
 
 interface GlassNavbarProps {
@@ -19,12 +19,6 @@ export const GlassNavbar: React.FC<GlassNavbarProps> = ({
       labelBn: 'গান',
       labelEn: 'Music',
       icon: Music,
-    },
-    {
-      id: 'video' as MainTab,
-      labelBn: 'ভিডিও',
-      labelEn: 'Video',
-      icon: Video,
     },
     {
       id: 'playlists' as MainTab,

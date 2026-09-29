@@ -57,7 +57,6 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.auraplayer.offline android.permission.READ_MEDIA_AUDIO
-            adb shell pm grant com.auraplayer.offline android.permission.READ_MEDIA_VIDEO
             adb shell am start -n com.auraplayer.offline/.GlassActivity
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard

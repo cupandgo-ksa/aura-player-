@@ -3,18 +3,15 @@ package com.auraplayer.offline;
 import android.Manifest;
 import android.app.Activity;
 import android.content.ContentUris;
-import android.content.res.AssetFileDescriptor;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
-import android.graphics.Color;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
-import android.view.Gravity;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
@@ -27,29 +24,24 @@ import android.webkit.WebChromeClient;
 import android.webkit.ConsoleMessage;
 import android.util.Log;
 import android.widget.FrameLayout;
-import android.widget.MediaController;
-import android.widget.TextView;
-import android.widget.VideoView;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
-import java.io.FilterInputStream;
 import java.io.InputStream;
 import java.net.URLConnection;
 import java.util.HashSet;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Locale;
 
 public class GlassActivity extends Activity {
     private static final int PERMISSION = 10, PICK = 11;
     private static final String ORIGIN = "https://aura.local";
     private WebView web;
-    private FrameLayout root, videoScreen;
-    private VideoView video;
+    private FrameLayout root;
     private volatile String queueJson = "[]";
+    private volatile boolean shuffleMode = false;
+    private volatile String repeatMode = "all";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -78,12 +70,6 @@ public class GlassActivity extends Activity {
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
                 try {
                     if ("/cover".equals(uri.getPath())) return cover(uri.getQueryParameter("u"));
-                    if ("/media".equals(uri.getPath())) {
-                        String range = null;
-                        for (Map.Entry<String, String> header : request.getRequestHeaders().entrySet())
-                            if ("range".equalsIgnoreCase(header.getKey())) range = header.getValue();
-                        return media(uri.getQueryParameter("u"), range);
-                    }
                     String path = uri.getPath();
                     path = path == null || path.equals("/") ? "index.html" : path.replaceFirst("^/", "");
                     if (path.contains("..")) return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
@@ -127,7 +113,7 @@ public class GlassActivity extends Activity {
 
     private void requestMedia() {
         String[] permissions = Build.VERSION.SDK_INT >= 33
-            ? new String[]{Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VIDEO}
+            ? new String[]{Manifest.permission.READ_MEDIA_AUDIO}
             : new String[]{Manifest.permission.READ_EXTERNAL_STORAGE};
         boolean missing = false;
         for (String p : permissions) if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) missing = true;
@@ -157,10 +143,9 @@ public class GlassActivity extends Activity {
         return o;
     }
     private String mediaJson() {
-        JSONArray all = new JSONArray(), audio = new JSONArray();
+        JSONArray all = new JSONArray();
         HashSet<String> seen = new HashSet<>();
-        readCollection(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, false, all, audio, seen);
-        readCollection(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, all, audio, seen);
+        readCollection(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, all, seen);
         try {
             JSONArray added = new JSONArray(getPreferences(0).getString("added", "[]"));
             for (int i = 0; i < added.length(); i++) {
@@ -173,25 +158,23 @@ public class GlassActivity extends Activity {
                     if (c != null && c.moveToFirst()) { name = c.getString(0); size = c.getLong(1); }
                 } catch (Exception ignored) { }
                 String mime = getContentResolver().getType(uri);
-                boolean video = mime != null && mime.startsWith("video/");
+                if (mime != null && !mime.startsWith("audio/")) continue;
                 String title = name == null ? "Local file" : name.replaceFirst("(?i)\\.[^.]+$", "").replace('_', ' ');
-                JSONObject item = track(value, title, "Local media", "", "Added files", video, 0, size);
-                all.put(item); if (!video) audio.put(item);
+                JSONObject item = track(value, title, "Local media", "", "Added files", false, 0, size);
+                all.put(item);
             }
         } catch (Exception ignored) { }
-        queueJson = audio.toString();
+        queueJson = all.toString();
         return all.toString();
     }
-    private void readCollection(Uri collection, boolean video, JSONArray all, JSONArray audio, HashSet<String> seen) {
+    private void readCollection(Uri collection, JSONArray all, HashSet<String> seen) {
         if (checkSelfPermission(Build.VERSION.SDK_INT >= 33
-            ? video ? Manifest.permission.READ_MEDIA_VIDEO : Manifest.permission.READ_MEDIA_AUDIO
-            : Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) return;
-        String[] cols = video
-            ? new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.DURATION,
-                MediaStore.MediaColumns.SIZE, Build.VERSION.SDK_INT >= 29 ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA}
-            : new String[]{MediaStore.MediaColumns._ID, MediaStore.Audio.Media.TITLE, MediaStore.MediaColumns.DURATION,
-                MediaStore.MediaColumns.SIZE, Build.VERSION.SDK_INT >= 29 ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA,
-                MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM};
+            ? Manifest.permission.READ_MEDIA_AUDIO : Manifest.permission.READ_EXTERNAL_STORAGE)
+            != PackageManager.PERMISSION_GRANTED) return;
+        String[] cols = {MediaStore.MediaColumns._ID, MediaStore.Audio.Media.TITLE,
+            MediaStore.MediaColumns.DURATION, MediaStore.MediaColumns.SIZE,
+            Build.VERSION.SDK_INT >= 29 ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA,
+            MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM};
         try (Cursor c = getContentResolver().query(collection, cols, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
             if (c == null) return;
             while (c.moveToNext()) {
@@ -200,63 +183,11 @@ public class GlassActivity extends Activity {
                 String name = c.getString(1);
                 if (name == null) continue;
                 String folder = c.getString(4);
-                JSONObject item = track(uri, name.replaceFirst("(?i)\\.[^.]+$", "").replace('_', ' '),
-                    video ? "Video" : c.getString(5), video ? "" : c.getString(6),
-                    folder == null ? "On this device" : folder, video, c.getLong(2), c.getLong(3));
-                all.put(item); if (!video) audio.put(item);
+                all.put(track(uri, name.replaceFirst("(?i)\\.[^.]+$", "").replace('_', ' '),
+                    c.getString(5), c.getString(6), folder == null ? "On this device" : folder,
+                    false, c.getLong(2), c.getLong(3)));
             }
         } catch (Exception ignored) { }
-    }
-    /** Stream a selected local video from the app's offline origin so the bundled player can seek. */
-    private WebResourceResponse media(String value, String range) throws Exception {
-        if (value == null || !value.startsWith("content://"))
-            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
-        Uri item = Uri.parse(value);
-        AssetFileDescriptor descriptor = getContentResolver().openAssetFileDescriptor(item, "r");
-        if (descriptor == null) throw new java.io.FileNotFoundException(value);
-        long length = descriptor.getLength();
-        long start = 0, end = length > 0 ? length - 1 : -1;
-        boolean partial = false;
-        if (length > 0 && range != null && range.startsWith("bytes=")) {
-            try {
-                String[] parts = range.substring(6).split("-", 2);
-                start = Math.max(0, Math.min(length - 1, Long.parseLong(parts[0])));
-                if (parts.length > 1 && !parts[1].isEmpty()) end = Math.min(end, Long.parseLong(parts[1]));
-                end = Math.max(start, end);
-                partial = true;
-            } catch (NumberFormatException ignored) { start = 0; end = length - 1; }
-        }
-        InputStream raw = descriptor.createInputStream();
-        long skipped = 0;
-        while (skipped < start) {
-            long n = raw.skip(start - skipped);
-            if (n <= 0) { raw.close(); throw new java.io.EOFException("Media range unavailable"); }
-            skipped += n;
-        }
-        final long count = end < 0 ? Long.MAX_VALUE : end - start + 1;
-        InputStream body = new FilterInputStream(raw) {
-            long remaining = count;
-            @Override public int read() throws java.io.IOException {
-                if (remaining <= 0) return -1;
-                int n = super.read(); if (n >= 0) remaining--; return n;
-            }
-            @Override public int read(byte[] b, int off, int len) throws java.io.IOException {
-                if (remaining <= 0) return -1;
-                int n = super.read(b, off, (int)Math.min(len, remaining));
-                if (n > 0) remaining -= n; return n;
-            }
-        };
-        String mime = getContentResolver().getType(item);
-        if (mime == null || !mime.startsWith("video/")) mime = "video/mp4";
-        Map<String, String> headers = new HashMap<>();
-        headers.put("Accept-Ranges", "bytes");
-        headers.put("Cache-Control", "no-store");
-        if (length > 0) {
-            headers.put("Content-Length", Long.toString(count));
-            if (partial) headers.put("Content-Range", "bytes " + start + "-" + end + "/" + length);
-        }
-        return new WebResourceResponse(mime, null, partial ? 206 : 200,
-            partial ? "Partial Content" : "OK", headers, body);
     }
 
     private WebResourceResponse cover(String value) {
@@ -275,8 +206,7 @@ public class GlassActivity extends Activity {
     }
     private void pickFiles() {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        i.setType("*/*"); i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"audio/*", "video/*"});
+        i.setType("audio/*"); i.addCategory(Intent.CATEGORY_OPENABLE);
         i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(i, PICK);
@@ -298,36 +228,23 @@ public class GlassActivity extends Activity {
         } catch (Exception ignored) { }
         notifyWeb();
     }
-    private void openVideo(String value) {
-        if (value == null || !value.startsWith("content://")) return;
-        if (videoScreen != null) closeVideo();
-        videoScreen = new FrameLayout(this);
-        videoScreen.setBackgroundColor(Color.BLACK);
-        video = new VideoView(this);
-        videoScreen.addView(video, new FrameLayout.LayoutParams(-1, -1));
-        TextView close = new TextView(this);
-        close.setText("‹  Back"); close.setTextColor(Color.WHITE); close.setTextSize(18);
-        close.setPadding(28, 20, 28, 20);
-        videoScreen.addView(close, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.LEFT));
-        close.setOnClickListener(v -> closeVideo());
-        root.addView(videoScreen, new FrameLayout.LayoutParams(-1, -1));
-        MediaController controls = new MediaController(this);
-        controls.setAnchorView(video); video.setMediaController(controls);
-        video.setVideoURI(Uri.parse(value)); video.start();
-    }
-    private void closeVideo() {
-        if (video != null) { video.stopPlayback(); video = null; }
-        if (videoScreen != null) { root.removeView(videoScreen); videoScreen = null; }
-    }
     private class Bridge {
         @JavascriptInterface public String getMedia() { return mediaJson(); }
         @JavascriptInterface public void pickMedia() { runOnUiThread(() -> pickFiles()); }
-        @JavascriptInterface public void openVideo(String uri) { runOnUiThread(() -> GlassActivity.this.openVideo(uri)); }
+        @JavascriptInterface public void setQueue(String json) {
+            if (json == null) return;
+            queueJson = json;
+            runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.updateQueue(json); });
+        }
+        @JavascriptInterface public void mode(boolean shuffle, String repeat) {
+            shuffleMode = shuffle; repeatMode = repeat;
+            runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.setPlaybackMode(shuffle, repeat); });
+        }
         @JavascriptInterface public void play(String uri, String title, String artist) {
             if (uri == null || !uri.startsWith("content://")) return;
             Intent i = new Intent(GlassActivity.this, AudioService.class).setAction(AudioService.PLAY)
                 .putExtra("uri", uri).putExtra("title", title).putExtra("artist", artist)
-                .putExtra("queue", queueJson);
+                .putExtra("queue", queueJson).putExtra("shuffle", shuffleMode).putExtra("repeat", repeatMode);
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
         }
         @JavascriptInterface public void pause() { runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.pause(); }); }
@@ -351,11 +268,11 @@ public class GlassActivity extends Activity {
         }
     }
     @Override public void onBackPressed() {
-        if (videoScreen != null) { closeVideo(); return; }
-        web.evaluateJavascript("window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))", null);
-        if (web.canGoBack()) web.goBack(); else super.onBackPressed();
+        web.evaluateJavascript("(function(){var open=!!document.querySelector('[data-audio-menu], [data-player-popover], [class*=fixed][class*=inset-0]');window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));return open})()", value -> {
+            if (!"true".equals(value)) moveTaskToBack(true);
+        });
     }
     @Override protected void onDestroy() {
-        closeVideo(); web.destroy(); super.onDestroy();
+        web.destroy(); super.onDestroy();
     }
 }

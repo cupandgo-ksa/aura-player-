@@ -13,29 +13,19 @@ import {
   saveSetting,
 } from './services/db';
 import { getInitialTracks, getInitialPlaylists } from './data/defaultTracks';
-import { getInitialVideos } from './data/defaultVideos';
 
 import { GlassBackground } from './components/GlassBackground';
 import { GlassHeader } from './components/GlassHeader';
 import { GlassNavbar } from './components/GlassNavbar';
 import { MiniPlayerBar } from './components/MiniPlayerBar';
 import { AudioTab } from './components/AudioTab';
-import { VideoTab } from './components/VideoTab';
 import { PlaylistsTab } from './components/PlaylistsTab';
 import { FoldersTab } from './components/FoldersTab';
 import { EqualizerTab } from './components/EqualizerTab';
 import { NowPlayingModal } from './components/NowPlayingModal';
-import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SleepTimerModal } from './components/SleepTimerModal';
 import { CreatePlaylistModal } from './components/CreatePlaylistModal';
 import { ImportMediaModal } from './components/ImportMediaModal';
-import { DownloadGuideModal } from './components/DownloadGuideModal';
-import { StudioToolsModal } from './components/StudioToolsModal';
-import { AudioCutterModal } from './components/AudioCutterModal';
-import { VideoToAudioModal } from './components/VideoToAudioModal';
-import { TagEditorModal } from './components/TagEditorModal';
-import { CarModeModal } from './components/CarModeModal';
-import { BookmarksModal } from './components/BookmarksModal';
 
 export const App: React.FC = () => {
   const audioEngine = AudioEngine.getInstance();
@@ -60,22 +50,9 @@ export const App: React.FC = () => {
 
   // Modals
   const [isNowPlayingOpen, setIsNowPlayingOpen] = useState(false);
-  const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
-  const [activeVideoTrack, setActiveVideoTrack] = useState<Track | null>(null);
   const [isSleepTimerOpen, setIsSleepTimerOpen] = useState(false);
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [isImportMediaOpen, setIsImportMediaOpen] = useState(false);
-  const [isDownloadGuideOpen, setIsDownloadGuideOpen] = useState(false);
-
-  // Premium Studio Tools Modals
-  const [isStudioToolsOpen, setIsStudioToolsOpen] = useState(false);
-  const [isAudioCutterOpen, setIsAudioCutterOpen] = useState(false);
-  const [activeCutterTrack, setActiveCutterTrack] = useState<Track | null>(null);
-  const [isVideoExtractorOpen, setIsVideoExtractorOpen] = useState(false);
-  const [isTagEditorOpen, setIsTagEditorOpen] = useState(false);
-  const [activeTagTrack, setActiveTagTrack] = useState<Track | null>(null);
-  const [isCarModeOpen, setIsCarModeOpen] = useState(false);
-  const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
 
   // Sleep Timer
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number>(0);
@@ -101,16 +78,14 @@ export const App: React.FC = () => {
       // 2. Load stored tracks or seed initial tracks
       const storedTracks = await getAllTracks();
       if (window.AuraNative) {
-        const found = phoneMedia().map((item) => ({ ...item,
+        const found = phoneMedia().filter((item) => item.type === 'audio').map((item) => ({ ...item,
           isFavorite: storedTracks.find((old) => old.id === item.id)?.isFavorite || false }));
         setTracks(found);
         setQueue(found.filter((t) => t.type === 'audio'));
         const first = found.find((t) => t.type === 'audio');
         if (first) { setCurrentTrack(first); audioEngine.setTrack(first, false); }
       } else if (storedTracks.length === 0) {
-        const initialAudio = getInitialTracks();
-        const initialVideo = getInitialVideos();
-        const combined = [...initialAudio, ...initialVideo];
+        const combined = getInitialTracks();
         await saveMultipleTracks(combined);
         setTracks(combined);
         setQueue(combined.filter((t) => t.type === 'audio'));
@@ -119,12 +94,12 @@ export const App: React.FC = () => {
           audioEngine.setTrack(combined[0], false);
         }
       } else {
-        setTracks(storedTracks);
         const audioList = storedTracks.filter((t) => t.type === 'audio');
-        setQueue(audioList.length > 0 ? audioList : storedTracks);
-        if (storedTracks.length > 0) {
-          setCurrentTrack(storedTracks[0]);
-          audioEngine.setTrack(storedTracks[0], false);
+        setTracks(audioList);
+        setQueue(audioList);
+        if (audioList.length > 0) {
+          setCurrentTrack(audioList[0]);
+          audioEngine.setTrack(audioList[0], false);
         }
       }
 
@@ -149,7 +124,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!window.AuraNative) return;
     const refresh = () => {
-      const found = phoneMedia();
+      const found = phoneMedia().filter((item) => item.type === 'audio');
       setTracks((previous) => {
         const updated = found.map((item) => ({ ...item,
           isFavorite: previous.find((old) => old.id === item.id)?.isFavorite || false }));
@@ -170,6 +145,27 @@ export const App: React.FC = () => {
     window.addEventListener('auraNativeTrack', changed);
     return () => window.removeEventListener('auraNativeTrack', changed);
   }, [tracks]);
+
+  useEffect(() => {
+    if (!window.AuraNative) return;
+    window.AuraNative.setQueue(JSON.stringify(queue.map((t) => ({ uri: t.url, title: t.title, artist: t.artist }))));
+  }, [queue]);
+
+  useEffect(() => {
+    window.AuraNative?.mode(isShuffle, repeatMode);
+  }, [isShuffle, repeatMode]);
+
+  useEffect(() => {
+    const closeOnBack = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsNowPlayingOpen(false);
+      setIsSleepTimerOpen(false);
+      setIsCreatePlaylistOpen(false);
+      setIsImportMediaOpen(false);
+    };
+    window.addEventListener('keydown', closeOnBack);
+    return () => window.removeEventListener('keydown', closeOnBack);
+  }, []);
 
   // Set up Audio Engine callbacks & MediaSession
   useEffect(() => {
@@ -342,25 +338,6 @@ export const App: React.FC = () => {
     }
   };
 
-  // Video Actions
-  const handlePlayVideo = (track: Track) => {
-    // Pause audio player first
-    audioEngine.pause();
-    setIsPlaying(false);
-    if (window.AuraNative) {
-      setActiveVideoTrack({ ...track, url: `https://aura.local/media?u=${encodeURIComponent(track.url)}` });
-      setIsVideoPlayerOpen(true);
-      return;
-    }
-    setActiveVideoTrack(track);
-    setIsVideoPlayerOpen(true);
-  };
-
-  const handlePlayVideoAsAudio = (track: Track) => {
-    // Play video track in background audio player
-    handlePlayTrack(tracks.find((item) => item.id === track.id) || track);
-  };
-
   // Playlist Actions
   const handlePlayPlaylist = (playlist: Playlist) => {
     const plTracks =
@@ -372,6 +349,7 @@ export const App: React.FC = () => {
 
     if (plTracks.length > 0) {
       setQueue(plTracks);
+      window.AuraNative?.setQueue(JSON.stringify(plTracks.map((t) => ({ uri: t.url, title: t.title, artist: t.artist }))));
       handlePlayTrack(plTracks[0]);
     }
   };
@@ -427,6 +405,7 @@ export const App: React.FC = () => {
 
   // Import local media
   const handleImportTracks = async (newTracks: Track[]) => {
+    newTracks = newTracks.filter((t) => t.type === 'audio');
     await saveMultipleTracks(newTracks);
     setTracks((prev) => [...prev, ...newTracks]);
     const newAudio = newTracks.filter((t) => t.type === 'audio');
@@ -447,30 +426,6 @@ export const App: React.FC = () => {
     saveSetting('lang', nextLang);
   };
 
-  // Studio Tools Handlers
-  const handleSaveTrimmedTrack = async (newTrack: Track) => {
-    await saveTrack(newTrack);
-    setTracks((prev) => [newTrack, ...prev]);
-    setQueue((prev) => [newTrack, ...prev]);
-  };
-
-  const handleAddExtractedTrack = async (newTrack: Track) => {
-    await saveTrack(newTrack);
-    setTracks((prev) => [newTrack, ...prev]);
-    setQueue((prev) => [newTrack, ...prev]);
-    handlePlayTrack(newTrack);
-    setCurrentTab('music');
-  };
-
-  const handleUpdateTrackTags = async (updatedTrack: Track) => {
-    await saveTrack(updatedTrack);
-    setTracks((prev) => prev.map((t) => (t.id === updatedTrack.id ? updatedTrack : t)));
-    setQueue((prev) => prev.map((t) => (t.id === updatedTrack.id ? updatedTrack : t)));
-    if (currentTrack?.id === updatedTrack.id) {
-      setCurrentTrack(updatedTrack);
-    }
-  };
-
   return (
     <div className="relative min-h-screen text-slate-100 flex flex-col justify-between selection:bg-purple-500/30 overflow-x-hidden">
       {/* Background Soft Glass Glow and Aurora Orbs */}
@@ -483,7 +438,6 @@ export const App: React.FC = () => {
         onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
         sleepTimerRemaining={sleepTimerRemaining}
         onOpenImport={openImport}
-        onOpenStudioTools={() => setIsStudioToolsOpen(true)}
       />
 
       {/* Main Tab Content based on cleanly separated selection */}
@@ -500,28 +454,6 @@ export const App: React.FC = () => {
             onOpenImport={openImport}
             playlists={playlists}
             onAddTrackToPlaylist={handleAddTrackToPlaylist}
-            onOpenCutter={(t) => {
-              setActiveCutterTrack(t);
-              setIsAudioCutterOpen(true);
-            }}
-            onOpenTagEditor={(t) => {
-              setActiveTagTrack(t);
-              setIsTagEditorOpen(true);
-            }}
-            onOpenBookmarks={() => {
-              setIsBookmarksOpen(true);
-            }}
-            lang={lang}
-          />
-        )}
-
-        {currentTab === 'video' && (
-          <VideoTab
-            tracks={tracks}
-            onPlayVideo={handlePlayVideo}
-            onPlayVideoAsAudio={handlePlayVideoAsAudio}
-            onToggleFavorite={handleToggleFavorite}
-            onOpenImport={openImport}
             lang={lang}
           />
         )}
@@ -605,15 +537,6 @@ export const App: React.FC = () => {
         lang={lang}
       />
 
-      {/* Fullscreen Video Player Modal */}
-      <VideoPlayerModal
-        isOpen={isVideoPlayerOpen}
-        onClose={() => setIsVideoPlayerOpen(false)}
-        videoTrack={activeVideoTrack}
-        onPlayVideoAsAudio={handlePlayVideoAsAudio}
-        lang={lang}
-      />
-
       {/* Sleep Timer Modal */}
       <SleepTimerModal
         isOpen={isSleepTimerOpen}
@@ -640,86 +563,6 @@ export const App: React.FC = () => {
         lang={lang}
       />
 
-      {/* Download & Install Guide Modal */}
-      <DownloadGuideModal
-        isOpen={isDownloadGuideOpen}
-        onClose={() => setIsDownloadGuideOpen(false)}
-        lang={lang}
-      />
-
-      {/* Premium Studio Tools Hub Modal */}
-      <StudioToolsModal
-        isOpen={isStudioToolsOpen}
-        onClose={() => setIsStudioToolsOpen(false)}
-        onOpenAudioCutter={() => {
-          setActiveCutterTrack(currentTrack || tracks[0]);
-          setIsAudioCutterOpen(true);
-        }}
-        onOpenVideoExtractor={() => setIsVideoExtractorOpen(true)}
-        onOpenTagEditor={() => {
-          setActiveTagTrack(currentTrack || tracks[0]);
-          setIsTagEditorOpen(true);
-        }}
-        onOpenCarMode={() => setIsCarModeOpen(true)}
-        onOpenEqualizer={() => setCurrentTab('equalizer')}
-        onOpenBookmarks={() => setIsBookmarksOpen(true)}
-        lang={lang}
-      />
-
-      {/* Audio Cutter & Ringtone Maker Modal */}
-      <AudioCutterModal
-        isOpen={isAudioCutterOpen}
-        onClose={() => setIsAudioCutterOpen(false)}
-        tracks={tracks.filter((t) => t.type === 'audio')}
-        initialTrack={activeCutterTrack || currentTrack}
-        onSaveTrimmedTrack={handleSaveTrimmedTrack}
-        lang={lang}
-      />
-
-      {/* Video to MP3 Extractor Modal */}
-      <VideoToAudioModal
-        isOpen={isVideoExtractorOpen}
-        onClose={() => setIsVideoExtractorOpen(false)}
-        videoTracks={tracks.filter((t) => t.type === 'video')}
-        onAddExtractedTrack={handleAddExtractedTrack}
-        lang={lang}
-      />
-
-      {/* ID3 Tag & Cover Art Editor Modal */}
-      <TagEditorModal
-        isOpen={isTagEditorOpen}
-        onClose={() => setIsTagEditorOpen(false)}
-        track={activeTagTrack || currentTrack}
-        onSaveTrack={handleUpdateTrackTags}
-        lang={lang}
-      />
-
-      {/* Car Driving Mode Modal */}
-      <CarModeModal
-        isOpen={isCarModeOpen}
-        onClose={() => setIsCarModeOpen(false)}
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
-        onTogglePlay={handleTogglePlay}
-        onPreviousTrack={handlePreviousTrack}
-        onNextTrack={handleNextTrack}
-        onToggleFavorite={handleToggleFavorite}
-        volume={volume}
-        onSetVolume={handleSetVolume}
-        isShuffle={isShuffle}
-        onToggleShuffle={handleToggleShuffle}
-        lang={lang}
-      />
-
-      {/* Smart Bookmarks & Audiobook Resume Modal */}
-      <BookmarksModal
-        isOpen={isBookmarksOpen}
-        onClose={() => setIsBookmarksOpen(false)}
-        currentTrack={currentTrack}
-        currentTime={currentTime}
-        onSeek={handleSeek}
-        lang={lang}
-      />
     </div>
   );
 };

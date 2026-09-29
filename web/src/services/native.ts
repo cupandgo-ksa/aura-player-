@@ -3,7 +3,8 @@ import { Track } from '../types/media';
 export interface NativeBridge {
   getMedia(): string;
   pickMedia(): void;
-  openVideo(uri: string): void;
+  setQueue(json: string): void;
+  mode(shuffle: boolean, repeat: string): void;
   play(uri: string, title: string, artist: string): void;
   pause(): void;
   resume(): void;

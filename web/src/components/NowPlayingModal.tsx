@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ChevronDown,
   Heart,
@@ -17,7 +17,6 @@ import {
   Clock,
   Sparkles,
   Gauge,
-  Activity,
   User,
   Disc3,
   Tag,
@@ -26,7 +25,6 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { Track, RepeatMode } from '../types/media';
-import { NowPlayingVisualizer } from './NowPlayingVisualizer';
 
 interface NowPlayingModalProps {
   isOpen: boolean;
@@ -83,7 +81,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
   onOpenSleepTimer,
   lang,
 }) => {
-  const [activeTab, setActiveTab] = useState<'art' | 'visualizer' | 'lyrics' | 'queue'>('art');
+  const [activeTab, setActiveTab] = useState<'art' | 'lyrics' | 'queue'>('art');
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [artStyle, setArtStyle] = useState<'vinyl' | 'cover' | 'glow'>(() => {
     const saved = localStorage.getItem('as-media-art-style');
@@ -95,6 +93,24 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
     setActiveTab('art'); setShowArtStyles(false);
   };
 
+  useEffect(() => {
+    if (!isOpen) { setShowArtStyles(false); setShowSpeedMenu(false); return; }
+    const outside = (event: PointerEvent) => {
+      if (!(event.target as Element).closest('[data-player-popover]')) {
+        setShowArtStyles(false); setShowSpeedMenu(false);
+      }
+    };
+    const scroll = () => { setShowArtStyles(false); setShowSpeedMenu(false); };
+    const back = (event: KeyboardEvent) => { if (event.key === 'Escape') scroll(); };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('scroll', scroll, true);
+    window.addEventListener('keydown', back);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('scroll', scroll, true);
+      window.removeEventListener('keydown', back);
+    };
+  }, [isOpen]);
   if (!isOpen || !currentTrack) return null;
 
   const formatTime = (seconds: number) => {
@@ -168,17 +184,6 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
             {lang === 'bn' ? 'অ্যালবাম আর্ট' : 'Album Art'}
           </button>
           <button
-            onClick={() => setActiveTab('visualizer')}
-            className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition ${
-              activeTab === 'visualizer'
-                ? 'bg-purple-500/30 text-purple-200 border border-purple-400/40 shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Activity className="w-3 h-3 text-purple-400 animate-pulse" />
-            <span>{lang === 'bn' ? 'ভিজ্যুয়ালাইজার' : 'Visualizer'}</span>
-          </button>
-          <button
             onClick={() => setActiveTab('lyrics')}
             className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition ${
               activeTab === 'lyrics'
@@ -200,7 +205,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
           </button>
         </div>
 
-        <div className="relative flex justify-end">
+        <div className="relative flex justify-end" data-player-popover>
           <button onClick={() => setShowArtStyles(!showArtStyles)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/20 bg-white/10 text-xs text-slate-200" aria-label={lang === 'bn' ? 'কভার স্টাইল বদলান' : 'Change cover style'}>
             <ImageIcon className="w-3.5 h-3.5" /> {lang === 'bn' ? 'কভার স্টাইল' : 'Cover style'}
           </button>
@@ -211,7 +216,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
           </div>}
         </div>
         {/* Center Main Stage */}
-        <div className="my-auto py-3 flex items-center justify-center min-h-[260px]">
+        <div className="my-auto py-3 flex items-center justify-center min-h-[230px]">
           {activeTab === 'art' && artStyle === 'vinyl' && (
             <div className="relative group flex items-center justify-center">
               {/* Outer soft glass glow halo */}
@@ -247,16 +252,6 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
 
           {activeTab === 'art' && artStyle === 'cover' && <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-[28px] overflow-hidden border border-white/25 shadow-2xl bg-white/10"><img src={currentTrack.coverUrl} alt={currentTrack.title} className="w-full h-full object-cover" /></div>}
           {activeTab === 'art' && artStyle === 'glow' && <div className="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center"><img src={currentTrack.coverUrl} alt="" className="absolute inset-2 w-[95%] h-[95%] object-cover blur-3xl opacity-50 rounded-full" /><img src={currentTrack.coverUrl} alt={currentTrack.title} className="relative w-52 h-52 sm:w-60 sm:h-60 object-cover rounded-[36px] border border-white/35 shadow-2xl" /></div>}
-          {activeTab === 'visualizer' && (
-            <div className="w-full">
-              <NowPlayingVisualizer
-                isPlaying={isPlaying}
-                coverUrl={currentTrack.coverUrl}
-                title={currentTrack.title}
-                lang={lang}
-              />
-            </div>
-          )}
 
           {activeTab === 'lyrics' && (
             <div className="w-full h-64 glass-card rounded-2xl p-5 border border-white/15 overflow-y-auto text-center space-y-3">
@@ -499,7 +494,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
           </div>
 
           {/* Playback speed selector */}
-          <div className="relative">
+          <div className="relative" data-player-popover>
             <button
               onClick={() => setShowSpeedMenu(!showSpeedMenu)}
               className="flex items-center gap-1 px-3 py-1.5 rounded-xl glass-card text-xs font-semibold text-purple-300 hover:text-white transition"

@@ -38,7 +38,7 @@ export interface EqualizerPreset {
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
-export type MainTab = 'music' | 'video' | 'playlists' | 'folders' | 'equalizer';
+export type MainTab = 'music' | 'playlists' | 'folders' | 'equalizer';
 
 export interface SleepTimerState {
   isActive: boolean;

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Play,
@@ -10,9 +10,6 @@ import {
   Clock,
   Sparkles,
   Volume2,
-  Scissors,
-  Tag,
-  Bookmark,
 } from 'lucide-react';
 import { Track, Playlist } from '../types/media';
 
@@ -27,9 +24,6 @@ interface AudioTabProps {
   onOpenImport: () => void;
   playlists: Playlist[];
   onAddTrackToPlaylist: (playlistId: string, trackId: string) => void;
-  onOpenCutter?: (track: Track) => void;
-  onOpenTagEditor?: (track: Track) => void;
-  onOpenBookmarks?: (track: Track) => void;
   lang: 'bn' | 'en';
 }
 
@@ -46,9 +40,6 @@ export const AudioTab: React.FC<AudioTabProps> = ({
   onOpenImport,
   playlists,
   onAddTrackToPlaylist,
-  onOpenCutter,
-  onOpenTagEditor,
-  onOpenBookmarks,
   lang,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,6 +47,23 @@ export const AudioTab: React.FC<AudioTabProps> = ({
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'title' | 'duration'>('recent');
   const [activeMenuTrackId, setActiveMenuTrackId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeMenuTrackId) return;
+    const outside = (event: PointerEvent) => {
+      if (!(event.target as Element).closest('[data-audio-menu]')) setActiveMenuTrackId(null);
+    };
+    const scroll = () => setActiveMenuTrackId(null);
+    const back = (event: KeyboardEvent) => { if (event.key === 'Escape') setActiveMenuTrackId(null); };
+    document.addEventListener('pointerdown', outside);
+    window.addEventListener('scroll', scroll, true);
+    window.addEventListener('keydown', back);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      window.removeEventListener('scroll', scroll, true);
+      window.removeEventListener('keydown', back);
+    };
+  }, [activeMenuTrackId]);
 
   const audioTracks = useMemo(() => {
     return tracks.filter((t) => t.type === 'audio');
@@ -349,7 +357,7 @@ export const AudioTab: React.FC<AudioTabProps> = ({
                   </button>
 
                   {/* Context Menu Toggle */}
-                  <div className="relative">
+                  <div className="relative" data-audio-menu>
                     <button
                       onClick={() =>
                         setActiveMenuTrackId(
@@ -364,7 +372,7 @@ export const AudioTab: React.FC<AudioTabProps> = ({
 
                     {/* Dropdown Menu */}
                     {activeMenuTrackId === track.id && (
-                      <div className="absolute right-0 top-8 w-48 rounded-2xl glass-panel p-2 shadow-2xl z-[70] border border-white/20 space-y-1">
+                      <div className="absolute right-0 top-8 w-48 max-h-72 overflow-y-auto rounded-2xl glass-panel p-2 shadow-2xl z-[70] border border-white/20 space-y-1">
                         <button
                           onClick={() => {
                             onAddToQueue(track);
@@ -376,44 +384,6 @@ export const AudioTab: React.FC<AudioTabProps> = ({
                           {lang === 'bn' ? 'পরের গানে যোগ করুন' : 'Add to Queue'}
                         </button>
 
-                        {onOpenCutter && (
-                          <button
-                            onClick={() => {
-                              onOpenCutter(track);
-                              setActiveMenuTrackId(null);
-                            }}
-                            className="w-full text-left px-3 py-1.5 rounded-xl text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
-                          >
-                            <Scissors className="w-3.5 h-3.5 text-purple-400" />
-                            {lang === 'bn' ? 'রিংটোন কাটার' : 'Trim & Ringtone'}
-                          </button>
-                        )}
-
-                        {onOpenTagEditor && (
-                          <button
-                            onClick={() => {
-                              onOpenTagEditor(track);
-                              setActiveMenuTrackId(null);
-                            }}
-                            className="w-full text-left px-3 py-1.5 rounded-xl text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
-                          >
-                            <Tag className="w-3.5 h-3.5 text-pink-400" />
-                            {lang === 'bn' ? 'ট্যাগ ও কভার এডিট' : 'Edit Tags & Cover'}
-                          </button>
-                        )}
-
-                        {onOpenBookmarks && (
-                          <button
-                            onClick={() => {
-                              onOpenBookmarks(track);
-                              setActiveMenuTrackId(null);
-                            }}
-                            className="w-full text-left px-3 py-1.5 rounded-xl text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
-                          >
-                            <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-                            {lang === 'bn' ? 'বুকমার্ক করুন' : 'Add Bookmark'}
-                          </button>
-                        )}
                         {playlists.length > 0 && (
                           <div className="pt-1 border-t border-white/10">
                             <div className="px-3 py-1 text-[10px] text-slate-400 font-semibold uppercase">

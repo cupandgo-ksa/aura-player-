@@ -42,6 +42,8 @@ public class AudioService extends Service {
     private float bass, treble;
     private boolean ready, requestedPlay;
     private int queueIndex = -1;
+    private boolean shuffleMode;
+    private String repeatMode = "all";
     private float speed = 1f;
     private float volume = .85f;
     private MediaSession session;
@@ -80,6 +82,7 @@ public class AudioService extends Service {
         String action = intent.getAction();
         if (PLAY.equals(action)) {
             readQueue(intent.getStringExtra("queue"));
+            setPlaybackMode(intent.getBooleanExtra("shuffle", false), intent.getStringExtra("repeat"));
             String target = intent.getStringExtra("uri");
             if (target == null) { stopSelf(); return START_NOT_STICKY; }
             title = intent.getStringExtra("title"); artist = intent.getStringExtra("artist"); uri = target;
@@ -123,7 +126,7 @@ public class AudioService extends Service {
                 if (position > 0) mp.seekTo(position);
                 if (requestedPlay) resume(); else updateNotification();
             });
-            next.setOnCompletionListener(mp -> { if (mp == player) this.next(); });
+            next.setOnCompletionListener(mp -> { if (mp == player) { if ("one".equals(repeatMode)) { seek(0); resume(); } else nextAfterCompletion(); } });
             next.setOnErrorListener((mp, what, extra) -> {
                 if (mp == player) { releasePlayer(); updateNotification(); }
                 return true;
@@ -152,8 +155,33 @@ public class AudioService extends Service {
         } catch (Exception ignored) { }
         updateNotification();
     }
-    public void next() { changeTrack(queueIndex + 1); }
-    public void previous() { if (position() > 4000) seek(0); else changeTrack(queueIndex - 1); }
+    public void updateQueue(String json) {
+        readQueue(json);
+        queueIndex = -1;
+        for (int n = 0; n < queue.size(); n++)
+            if (queue.get(n).uri.equals(uri)) { queueIndex = n; break; }
+    }
+    public void setPlaybackMode(boolean shuffle, String repeat) {
+        shuffleMode = shuffle;
+        repeatMode = "one".equals(repeat) || "off".equals(repeat) ? repeat : "all";
+    }
+    private void nextAfterCompletion() {
+        if (queue.isEmpty()) { pause(); return; }
+        if (!shuffleMode && "off".equals(repeatMode) && queueIndex >= queue.size() - 1) { pause(); return; }
+        next();
+    }
+    public void next() {
+        if (queue.isEmpty()) { pause(); return; }
+        if (shuffleMode && queue.size() > 1) {
+            int index = queueIndex;
+            while (index == queueIndex) index = (int)(Math.random() * queue.size());
+            changeTrack(index);
+        } else changeTrack(queueIndex + 1 < queue.size() ? queueIndex + 1 : 0);
+    }
+    public void previous() {
+        if (position() > 4000) seek(0);
+        else if (!queue.isEmpty()) changeTrack(queueIndex > 0 ? queueIndex - 1 : queue.size() - 1);
+    }
     private void changeTrack(int index) {
         if (index < 0 || index >= queue.size()) { pause(); return; }
         Track track = queue.get(index); queueIndex = index;
