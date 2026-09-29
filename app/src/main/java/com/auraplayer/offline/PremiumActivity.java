@@ -10,10 +10,12 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.media.PlaybackParams;
 import android.net.Uri;
@@ -29,6 +31,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -56,9 +60,9 @@ import java.util.concurrent.Executors;
 
 public class PremiumActivity extends Activity {
     private static final int PICK_MEDIA = 40, PICK_SUBTITLE = 41, ASK_MEDIA = 42;
-    private static final int[] BG = {0xFF080D17, 0xFF071916, 0xFF111725, 0xFF1C111B};
-    private static final int[] ACCENT = {0xFF70B5FF, 0xFF5CE0BF, 0xFFC9B9FF, 0xFFF3A9C4};
-    private static final String[] THEMES = {"Ocean", "Emerald", "Violet", "Rose"};
+    private static final int[] BG = {0xFF050505, 0xFF0B1110, 0xFF100E13, 0xFF150E10};
+    private static final int[] ACCENT = {0xFFF7F7F7, 0xFFBFD8D2, 0xFFD9D1E6, 0xFFE8CED9};
+    private static final String[] THEMES = {"Soft white", "Sage", "Lilac", "Rose"};
     private static final float[] SPEEDS = {.5f, .75f, 1f, 1.25f, 1.5f, 2f};
     private final ArrayList<Entry> media = new ArrayList<>();
     private final ArrayList<Caption> captions = new ArrayList<>();
@@ -66,6 +70,9 @@ public class PremiumActivity extends Activity {
     private final Random random = new Random();
     private final ExecutorService thumbnails = Executors.newFixedThreadPool(2);
     private final LruCache<String, Bitmap> thumbCache = new LruCache<>(32);
+    private final java.util.Set<String> unavailableArt = Collections.synchronizedSet(new HashSet<>());
+    private final HashSet<String> favorites = new HashSet<>();
+    private final ArrayList<String> recentUris = new ArrayList<>();
     private LinearLayout homeList, playerRoot, playerControls, playerTop;
     private FrameLayout stage;
     private VideoView video;
@@ -74,7 +81,9 @@ public class PremiumActivity extends Activity {
     private Button play, miniPlay, tabVideo, tabAudio, folderButton, lockButton;
     private SeekBar progress;
     private View miniBar, playerView, homeView;
-    private int active = -1, theme, tab = 0, sortMode = 0, resumePosition;
+    private ImageView playerArt, ambientArt;
+    private int active = -1, theme, tab = 0, sortMode = 0, resumePosition, collectionMode = 0;
+    private String groupFilter = "";
     private boolean onPlayer, audioReady, videoReady, repeat, shuffle, locked, fullscreen, scrubbing, enteringPip;
     private boolean keepPlayingAfterTheme;
     private float speed = 1f, downX, downY, startBrightness;
@@ -97,7 +106,7 @@ public class PremiumActivity extends Activity {
     };
 
     private static class Entry {
-        String uri, name, folder;
+        String uri, name, folder, artist = "Unknown artist", album = "";
         boolean video, imported;
         long duration;
         Entry(String uri, String name, String folder, boolean video, long duration, boolean imported) {
@@ -112,8 +121,11 @@ public class PremiumActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if (!getPreferences(0).getBoolean("minimal_theme_v3", false)) {
+            getPreferences(0).edit().putInt("theme", 0).putBoolean("minimal_theme_v3", true).apply();
+        }
         theme = Math.max(0, Math.min(3, getPreferences(0).getInt("theme", 0)));
-        loadImports(); showHome(); handler.post(ticker); requestLibrary();
+        loadCollections(); loadImports(); showHome(); handler.post(ticker); requestLibrary();
     }
     private int dp(float v) { return (int)(getResources().getDisplayMetrics().density * v + .5f); }
     private GradientDrawable glass(int color, int radius, int stroke) {
@@ -130,7 +142,7 @@ public class PremiumActivity extends Activity {
     }
     private Button button(String name, Runnable action) {
         Button b = new Button(this); b.setText(name); b.setAllCaps(false); b.setTextSize(13);
-        b.setTextColor(Color.WHITE); b.setBackground(glass(0x4750667D, 15, 0x3EFFFFFF));
+        b.setTextColor(Color.WHITE); b.setBackground(glass(0x24FFFFFF, 16, 0x20FFFFFF));
         b.setOnClickListener(v -> action.run()); return b;
     }
     private void addSpace(LinearLayout l, int height) { l.addView(new View(this), new LinearLayout.LayoutParams(1, dp(height))); }
@@ -146,49 +158,26 @@ public class PremiumActivity extends Activity {
 
     private void showHome() {
         onPlayer = false; playerView = null; playerTitle = null; time = null; progress = null;
-        captionView = null; play = null; video = null; stage = null;
+        captionView = null; play = null; video = null; stage = null; playerArt = null; ambientArt = null;
         LinearLayout root = column(); base(root); homeView = root; setContentView(root);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true);
+        scroll.setVerticalScrollBarEnabled(false);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        LinearLayout body = column(); padded(body, 18, 18); scroll.addView(body);
-        LinearLayout header = row(); body.addView(header);
-        LinearLayout brand = column();
-        brand.addView(text("AURA  /  PLAYER", 27, true, Color.WHITE));
-        brand.addView(text("YOUR OFFLINE CINEMA & MUSIC", 10, true, ACCENT[theme]));
-        header.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
-        Button options = button("◈", this::themeDialog);
-        header.addView(options, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        addSpace(body, 22);
+        LinearLayout body = column(); padded(body, 19, 14); scroll.addView(body);
 
-        LinearLayout banner = column(); padded(banner, 20, 20);
-        banner.setBackground(glass(0x774277A0, 25, 0x6CFFFFFF)); body.addView(banner);
-        banner.addView(text("ALL YOUR MEDIA", 11, true, 0xFFE8ECFF));
-        addSpace(banner, 7);
-        banner.addView(text("One beautiful place\nfor every moment.", 25, true, Color.WHITE));
-        addSpace(banner, 15);
-        LinearLayout bannerActions = row();
-        Button importButton = button("＋  Add files", this::pickMedia);
-        importButton.setBackground(glass(ACCENT[theme], 15, Color.WHITE)); importButton.setTextColor(BG[theme]);
-        inRow(bannerActions, importButton, 1, 44);
-        inRow(bannerActions, button("↻  Scan", this::requestLibrary), 1, 44);
-        banner.addView(bannerActions);
-        addSpace(body, 23);
+        LinearLayout heading = row(); body.addView(heading);
+        TextView logo = text("AURA", 22, true, Color.WHITE);
+        logo.setLetterSpacing(.16f); heading.addView(logo, new LinearLayout.LayoutParams(0, dp(42), 1));
+        Button settings = plainButton("⋮", this::homeMenu, 26);
+        heading.addView(settings, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        addSpace(body, 17);
 
-        LinearLayout tabs = row(); body.addView(tabs);
-        tabVideo = button("▣  VIDEOS", () -> { tab = 0; folder = "All"; refreshHome(); });
-        tabAudio = button("♫  MUSIC", () -> { tab = 1; folder = "All"; refreshHome(); });
-        inRow(tabs, tabVideo, 1, 47); inRow(tabs, tabAudio, 1, 47);
-        addSpace(body, 15);
-        LinearLayout tools = row(); body.addView(tools);
-        folderButton = button("All folders ▾", this::chooseFolder);
-        inRow(tools, folderButton, 2, 43);
-        inRow(tools, button("Sort ⇅", this::chooseSort), 1, 43);
-        addSpace(body, 13);
-        EditText search = new EditText(this); search.setSingleLine(true); search.setTextColor(Color.WHITE);
-        search.setHintTextColor(0xFFAFBBD0); search.setTextSize(14);
-        search.setHint("⌕   Search files by name"); padded(search, 14, 3);
-        search.setBackground(glass(0x38547090, 17, 0x33FFFFFF));
-        body.addView(search, new LinearLayout.LayoutParams(-1, dp(49)));
+        EditText search = new EditText(this); search.setSingleLine(true);
+        search.setTextColor(Color.WHITE); search.setHintTextColor(0xFF777777);
+        search.setTextSize(14); search.setHint("⌕  Search songs, videos, artists");
+        search.setPadding(dp(19), 0, dp(14), 0);
+        search.setBackground(glass(0x1DFFFFFF, 25, 0x0FFFFFFF));
+        body.addView(search, new LinearLayout.LayoutParams(-1, dp(51)));
         search.setText(query);
         search.addTextChangedListener(new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence s, int st, int count, int after) { }
@@ -196,96 +185,206 @@ public class PremiumActivity extends Activity {
             public void afterTextChanged(android.text.Editable e) { }
         });
         addSpace(body, 19);
-        countView = text("", 12, true, ACCENT[theme]); body.addView(countView);
-        addSpace(body, 9);
-        homeList = column(); body.addView(homeList);
-        addSpace(body, 16);
+
+        LinearLayout shortcuts = row(); body.addView(shortcuts);
+        shortcut(shortcuts, "♡", "Favorites", () -> { collectionMode = 1; groupFilter = ""; refreshHome(); });
+        shortcut(shortcuts, "◷", "Recent", () -> { collectionMode = 2; groupFilter = ""; refreshHome(); });
+        shortcut(shortcuts, "▤", "Folders", this::chooseFolder);
+        addSpace(body, 18);
+
+        LinearLayout tabs = row(); body.addView(tabs);
+        tabVideo = tabButton(tabs, "Songs", 0);
+        tabAudio = tabButton(tabs, "Videos", 1);
+        tabButton(tabs, "Artists", 2);
+        tabButton(tabs, "Albums", 3);
+        addSpace(body, 17);
+        LinearLayout toolbar = row(); body.addView(toolbar);
+        Button shuffleAll = plainButton("▶", () -> playCollection(true), 18);
+        shuffleAll.setTextColor(BG[theme]); shuffleAll.setBackground(glass(ACCENT[theme], 24, 0x44FFFFFF));
+        toolbar.addView(shuffleAll, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        TextView headingText = text("  Shuffle playback", 14, true, Color.WHITE);
+        toolbar.addView(headingText, new LinearLayout.LayoutParams(0, dp(40), 1));
+        headingText.setOnClickListener(v -> playCollection(true));
+        toolbar.addView(plainButton("⇅", this::chooseSort, 21), new LinearLayout.LayoutParams(dp(43), dp(40)));
+        toolbar.addView(plainButton("＋", this::pickMedia, 22), new LinearLayout.LayoutParams(dp(43), dp(40)));
+        addSpace(body, 11);
+        countView = text("", 12, false, 0xFF8C8C8C); body.addView(countView);
+        addSpace(body, 2);
+        homeList = column(); body.addView(homeList); addSpace(body, 10);
         miniBar = miniPlayer(); root.addView(miniBar);
         refreshHome();
     }
+    private Button plainButton(String value, Runnable action, int size) {
+        Button b = button(value, action); b.setTextSize(size); b.setBackgroundColor(Color.TRANSPARENT);
+        b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(0, 0, 0, 0); return b;
+    }
+    private void shortcut(LinearLayout parent, String icon, String label, Runnable action) {
+        LinearLayout card = column(); card.setGravity(Gravity.CENTER_VERTICAL); padded(card, 11, 9);
+        card.setBackground(glass(0x1BFFFFFF, 16, 0x13FFFFFF));
+        card.addView(text(icon, 24, false, Color.WHITE));
+        card.addView(text(label, 12, true, 0xFFE8E8E8));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(88), 1);
+        lp.setMargins(dp(3), 0, dp(3), 0); parent.addView(card, lp);
+        card.setOnClickListener(v -> action.run());
+    }
+    private Button tabButton(LinearLayout parent, String label, int value) {
+        Button b = plainButton(label, () -> { tab = value; groupFilter = ""; groupByAlbum = false; collectionMode = 0; folder = "All"; refreshHome(); }, 14);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(42), 1);
+        p.setMargins(dp(2), 0, dp(2), 0); parent.addView(b, p);
+        b.setTag(value); return b;
+    }
+    private void homeMenu() {
+        new AlertDialog.Builder(this).setItems(new String[]{"Add local files", "Scan phone", "Choose folder", "Appearance"},
+            (d, n) -> { if (n == 0) pickMedia(); else if (n == 1) requestLibrary();
+                else if (n == 2) chooseFolder(); else themeDialog(); }).show();
+    }
     private View miniPlayer() {
-        LinearLayout outer = row(); padded(outer, 13, 9);
-        outer.setBackground(glass(0xDD23324B, 17, 0x55FFFFFF));
-        TextView symbol = text("♫", 25, true, ACCENT[theme]); outer.addView(symbol, new LinearLayout.LayoutParams(dp(38), -1));
-        miniTitle = text("", 14, true, Color.WHITE); miniTitle.setSingleLine(true);
-        miniTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        outer.addView(miniTitle, new LinearLayout.LayoutParams(0, -1, 1));
-        miniPlay = button("▶", this::toggle); outer.addView(miniPlay, new LinearLayout.LayoutParams(dp(47), dp(47)));
-        outer.setOnClickListener(v -> { if (active >= 0) showPlayer(); });
+        LinearLayout bar = row(); bar.setPadding(dp(8), dp(5), dp(8), dp(5));
+        bar.setBackground(glass(0xDD3A3A3A, 26, 0x39FFFFFF));
+        LinearLayout outer = row(); outer.setPadding(dp(11), dp(2), dp(11), dp(10));
+        outer.addView(bar, new LinearLayout.LayoutParams(-1, dp(66)));
+        if (active >= 0) {
+            Entry e = media.get(active);
+            ImageView art = new ImageView(this); art.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            art.setBackground(glass(0xFF323232, 20, 0));
+            bar.addView(art, new LinearLayout.LayoutParams(dp(52), dp(52)));
+            loadArt(art, e);
+            LinearLayout info = column(); info.setPadding(dp(10), dp(5), dp(2), 0);
+            miniTitle = text(e.name, 14, true, Color.WHITE); miniTitle.setSingleLine(true);
+            miniTitle.setEllipsize(android.text.TextUtils.TruncateAt.END); info.addView(miniTitle);
+            info.addView(text(e.video ? "Video" : e.artist, 11, false, 0xFFBBBBBB));
+            bar.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
+            miniPlay = plainButton(isPlaying() ? "Ⅱ" : "▶", this::toggle, 20);
+            bar.addView(miniPlay, new LinearLayout.LayoutParams(dp(42), dp(44)));
+            bar.addView(plainButton("▸|", this::next, 18), new LinearLayout.LayoutParams(dp(36), dp(44)));
+            bar.setOnClickListener(v -> showPlayer());
+        }
         outer.setVisibility(active < 0 ? View.GONE : View.VISIBLE);
-        if (active >= 0) miniTitle.setText(media.get(active).name);
         return outer;
     }
     private void refreshHome() {
         if (homeList == null || onPlayer) return;
-        tabVideo.setBackground(glass(tab == 0 ? ACCENT[theme] : 0x42546986, 16, 0x40FFFFFF));
-        tabAudio.setBackground(glass(tab == 1 ? ACCENT[theme] : 0x42546986, 16, 0x40FFFFFF));
-        tabVideo.setTextColor(tab == 0 ? BG[theme] : Color.WHITE);
-        tabAudio.setTextColor(tab == 1 ? BG[theme] : Color.WHITE);
-        folderButton.setText(folder.equals("All") ? "All folders ▾" : folder + " ▾");
-        homeList.removeAllViews();
-        ArrayList<Integer> ids = new ArrayList<>();
-        for (int i = 0; i < media.size(); i++) {
-            Entry e = media.get(i);
-            if (e.video != (tab == 0) || !folder.equals("All") && !folder.equals(e.folder)) continue;
-            if (!e.name.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))) continue;
-            ids.add(i);
+        LinearLayout tabs = (LinearLayout)tabVideo.getParent();
+        for (int i = 0; i < tabs.getChildCount(); i++) {
+            Button b = (Button)tabs.getChildAt(i);
+            boolean selected = i == tab;
+            b.setTextColor(selected ? Color.BLACK : 0xFF999999);
+            b.setBackground(selected ? glass(0xFFF5F5F5, 13, 0) : null);
         }
-        if (sortMode == 1) Collections.sort(ids, (a,b) -> media.get(a).name.compareToIgnoreCase(media.get(b).name));
-        if (sortMode == 2) Collections.sort(ids, (a,b) -> Long.compare(media.get(b).duration, media.get(a).duration));
-        countView.setText(ids.size() + (tab == 0 ? " VIDEOS" : " AUDIO TRACKS"));
+        homeList.removeAllViews();
+        ArrayList<Integer> ids = visibleItems();
+        String label = collectionMode == 1 ? "FAVORITES" : collectionMode == 2 ? "RECENT" :
+            !groupFilter.isEmpty() ? groupFilter : folder.equals("All") ? "ON THIS DEVICE" : folder;
+        countView.setText(label + "   ·   " + ids.size());
+        if (tab == 2 || tab == 3) { showGroups(ids); return; }
         if (ids.isEmpty()) {
-            LinearLayout empty = column(); padded(empty, 25, 28);
-            empty.setBackground(glass(0x31526C89, 20, 0x35FFFFFF));
-            empty.addView(text("No files here yet", 19, true, Color.WHITE));
-            addSpace(empty, 7);
-            empty.addView(text("Allow a scan or add files from your phone.", 13, false, 0xFFC7D2E1));
-            homeList.addView(empty); return;
+            TextView empty = text("Nothing here yet. Add files or scan your phone.", 14, false, 0xFF929292);
+            empty.setPadding(dp(5), dp(30), dp(5), dp(30)); homeList.addView(empty); return;
         }
         for (int j = 0; j < Math.min(ids.size(), 250); j++) {
             int id = ids.get(j); Entry e = media.get(id);
-            LinearLayout item = row(); padded(item, 10, 9);
-            item.setBackground(glass(id == active ? 0x605C86AF : 0x3554667E, 18,
-                id == active ? ACCENT[theme] : 0x29FFFFFF));
-            ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            image.setBackground(glass(0x705B799A, 12, 0x33FFFFFF));
-            if (e.video) thumbnail(image, e.uri);
-            else image.setImageDrawable(null);
-            FrameLayout art = new FrameLayout(this); art.addView(image, new FrameLayout.LayoutParams(-1, -1));
-            if (!e.video) {
-                TextView note = text("♫", 30, true, ACCENT[theme]); note.setGravity(Gravity.CENTER);
-                art.addView(note, new FrameLayout.LayoutParams(-1, -1));
-            }
-            item.addView(art, new LinearLayout.LayoutParams(dp(69), dp(63)));
-            LinearLayout info = column(); info.setPadding(dp(12), dp(4), dp(5), 0);
-            TextView name = text(e.name, 14, true, Color.WHITE); name.setMaxLines(2);
-            info.addView(name);
-            info.addView(text(e.folder + "   •   " + format((int)e.duration), 11, false, 0xFFBAC9DC));
-            item.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
-            item.addView(text("›", 25, false, ACCENT[theme]));
+            LinearLayout item = row(); item.setPadding(dp(2), dp(8), dp(2), dp(8));
+            ImageView art = new ImageView(this); art.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            art.setBackground(glass(0xFF292929, 7, 0));
+            item.addView(art, new LinearLayout.LayoutParams(dp(53), dp(53)));
+            loadArt(art, e);
+            LinearLayout info = column(); info.setPadding(dp(12), dp(3), dp(4), 0);
+            TextView name = text(e.name, 15, false, Color.WHITE); name.setSingleLine(true);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END); info.addView(name);
+            TextView by = text(e.video ? e.folder : e.artist + (e.album.isEmpty() ? "" : "  |  " + e.album), 12, false, 0xFF8F8F8F);
+            by.setSingleLine(true); by.setEllipsize(android.text.TextUtils.TruncateAt.END); info.addView(by);
+            item.addView(info, new LinearLayout.LayoutParams(0, dp(53), 1));
+            item.addView(plainButton("⋮", () -> itemMenu(id), 19), new LinearLayout.LayoutParams(dp(37), dp(47)));
             item.setOnClickListener(v -> start(id));
-            item.setOnLongClickListener(v -> { itemMenu(id); return true; });
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-            p.bottomMargin = dp(9); homeList.addView(item, p);
+            homeList.addView(item, new LinearLayout.LayoutParams(-1, dp(69)));
         }
-        if (ids.size() > 250) homeList.addView(text("Showing first 250 results. Use search to find more.", 12, false, 0xFFAFBED0));
+        if (ids.size() > 250) homeList.addView(text("Use search to find more files", 12, false, 0xFF888888));
     }
-    private void thumbnail(ImageView view, String uri) {
+    private ArrayList<Integer> visibleItems() {
+        ArrayList<Integer> ids = new ArrayList<>();
+        for (int i = 0; i < media.size(); i++) {
+            Entry e = media.get(i);
+            if (tab == 1 ? !e.video : e.video) continue;
+            if (!folder.equals("All") && !folder.equals(e.folder)) continue;
+            if (!groupFilter.isEmpty() && !groupFilter.equals(groupByAlbum ? e.album : e.artist)) continue;
+            if (collectionMode == 1 && !favorites.contains(e.uri)) continue;
+            if (collectionMode == 2 && !recentUris.contains(e.uri)) continue;
+            String match = (e.name + " " + e.artist + " " + e.album).toLowerCase(Locale.ROOT);
+            if (!match.contains(query.toLowerCase(Locale.ROOT))) continue;
+            ids.add(i);
+        }
+        if (collectionMode == 2) Collections.sort(ids, (a,b) -> Integer.compare(recentUris.indexOf(media.get(a).uri), recentUris.indexOf(media.get(b).uri)));
+        else if (sortMode == 1) Collections.sort(ids, (a,b) -> media.get(a).name.compareToIgnoreCase(media.get(b).name));
+        else if (sortMode == 2) Collections.sort(ids, (a,b) -> Long.compare(media.get(b).duration, media.get(a).duration));
+        return ids;
+    }
+    private void showGroups(ArrayList<Integer> ids) {
+        ArrayList<String> groups = new ArrayList<>();
+        for (int id : ids) {
+            Entry e = media.get(id); String group = tab == 2 ? e.artist : e.album;
+            if (group.isEmpty()) group = "Unknown";
+            if (!groups.contains(group)) groups.add(group);
+        }
+        Collections.sort(groups);
+        for (String group : groups) {
+            TextView line = text("♫     " + group + "     ›", 16, false, Color.WHITE);
+            line.setSingleLine(true); line.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            line.setPadding(dp(8), dp(8), dp(8), dp(8));
+            homeList.addView(line, new LinearLayout.LayoutParams(-1, dp(60)));
+            int fromTab = tab;
+            line.setOnClickListener(v -> { groupFilter = group; tab = 0; collectionMode = 0;
+                // The selected group type is retained when filtering songs.
+                groupByAlbum = fromTab == 3; refreshHome(); });
+        }
+    }
+    private boolean groupByAlbum;
+    private void playCollection(boolean randomOrder) {
+        ArrayList<Integer> ids = visibleItems(); if (ids.isEmpty()) return;
+        int chosen = randomOrder ? ids.get(random.nextInt(ids.size())) : ids.get(0);
+        start(chosen);
+    }
+    private void loadArt(ImageView view, Entry entry) {
+        String uri = entry.uri;
         view.setTag(uri);
-        Bitmap cached = thumbCache.get(uri);
+        Bitmap cached;
+        synchronized (thumbCache) { cached = thumbCache.get(uri); }
         if (cached != null) { view.setImageBitmap(cached); return; }
-        if (Build.VERSION.SDK_INT < 29) return;
+        if (unavailableArt.contains(uri)) return;
         thumbnails.execute(() -> {
+            Bitmap bmp = null;
             try {
-                Bitmap bmp = getContentResolver().loadThumbnail(Uri.parse(uri), new Size(dp(120), dp(100)), null);
-                thumbCache.put(uri, bmp);
-                runOnUiThread(() -> { if (uri.equals(view.getTag())) view.setImageBitmap(bmp); });
+                if (entry.video && Build.VERSION.SDK_INT >= 29) {
+                    bmp = getContentResolver().loadThumbnail(Uri.parse(uri), new Size(dp(300), dp(300)), null);
+                } else if (!entry.video) {
+                    MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+                    try {
+                        retriever.setDataSource(this, Uri.parse(uri));
+                        byte[] art = retriever.getEmbeddedPicture();
+                        if (art != null) {
+                            BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
+                            BitmapFactory.decodeByteArray(art, 0, art.length, bounds);
+                            BitmapFactory.Options options = new BitmapFactory.Options(); options.inSampleSize = 1;
+                            while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 650) options.inSampleSize *= 2;
+                            bmp = BitmapFactory.decodeByteArray(art, 0, art.length, options);
+                        }
+                        String title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
+                        String artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
+                        String album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
+                        if (title != null && !title.trim().isEmpty()) entry.name = title.trim();
+                        if (artist != null && !artist.trim().isEmpty()) entry.artist = artist.trim();
+                        if (album != null && !album.trim().isEmpty()) entry.album = album.trim();
+                    } finally { retriever.release(); }
+                }
             } catch (Exception ignored) { }
+            final Bitmap result = bmp;
+            if (result == null) unavailableArt.add(uri);
+            else synchronized (thumbCache) { thumbCache.put(uri, result); }
+            runOnUiThread(() -> { if (result != null && uri.equals(view.getTag())) view.setImageBitmap(result); });
         });
     }
     private void chooseFolder() {
         HashSet<String> folders = new HashSet<>();
-        for (Entry e : media) if (e.video == (tab == 0)) folders.add(e.folder);
+        for (Entry e : media) if (e.video == (tab == 1)) folders.add(e.folder);
         ArrayList<String> names = new ArrayList<>(folders); Collections.sort(names); names.add(0, "All");
         new AlertDialog.Builder(this).setTitle("Choose folder").setItems(names.toArray(new String[0]),
             (d, which) -> { folder = names.get(which); refreshHome(); }).show();
@@ -297,10 +396,11 @@ public class PremiumActivity extends Activity {
     }
     private void itemMenu(int id) {
         Entry e = media.get(id);
-        new AlertDialog.Builder(this).setTitle(e.name).setItems(new String[]{"Play", "Share file", "Remove from this list"},
+        new AlertDialog.Builder(this).setTitle(e.name).setItems(new String[]{"Play", favorites.contains(e.uri) ? "Remove favorite" : "Add favorite", "Share file", "Remove from this list"},
             (d, which) -> {
                 if (which == 0) start(id);
-                else if (which == 1) {
+                else if (which == 1) { toggleFavorite(e.uri); refreshHome(); }
+                else if (which == 2) {
                     Intent s = new Intent(Intent.ACTION_SEND); s.setType(e.video ? "video/*" : "audio/*");
                     s.putExtra(Intent.EXTRA_STREAM, Uri.parse(e.uri));
                     s.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivity(Intent.createChooser(s, "Share with"));
@@ -352,9 +452,14 @@ public class PremiumActivity extends Activity {
     }
     private void scanType(ArrayList<Entry> found, boolean videos) {
         Uri collection = videos ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI : MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-        String[] cols = {MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.DURATION, Build.VERSION.SDK_INT >= 29
-                ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA};
+        String[] cols = videos
+            ? new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
+                MediaStore.MediaColumns.DURATION, Build.VERSION.SDK_INT >= 29
+                    ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA}
+            : new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
+                MediaStore.MediaColumns.DURATION, Build.VERSION.SDK_INT >= 29
+                    ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA,
+                MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM};
         try (Cursor c = getContentResolver().query(collection, cols, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
             if (c == null) return;
             while (c.moveToNext()) {
@@ -363,8 +468,16 @@ public class PremiumActivity extends Activity {
                 String folderName = path == null || path.isEmpty() ? "Device" : path.replaceAll("/$", "");
                 if (Build.VERSION.SDK_INT < 29 && folderName.contains("/"))
                     folderName = folderName.substring(0, folderName.lastIndexOf('/'));
-                found.add(new Entry(ContentUris.withAppendedId(collection, id).toString(), name,
-                    folderName, videos, c.getLong(2), false));
+                String title = videos ? cleanName(name) : c.getString(4);
+                Entry item = new Entry(ContentUris.withAppendedId(collection, id).toString(),
+                    title == null || title.trim().isEmpty() ? cleanName(name) : title.trim(),
+                    folderName, videos, c.getLong(2), false);
+                if (!videos) {
+                    String artist = c.getString(5), album = c.getString(6);
+                    if (artist != null && !artist.trim().isEmpty() && !artist.equals("<unknown>")) item.artist = artist;
+                    if (album != null && !album.trim().isEmpty() && !album.equals("<unknown>")) item.album = album;
+                }
+                found.add(item);
             }
         } catch (Exception ignored) { }
     }
@@ -395,7 +508,7 @@ public class PremiumActivity extends Activity {
         } catch (Exception ignored) { }
         if (name == null) name = "Local file";
         boolean isVideo = mime != null && mime.startsWith("video/") || name.matches("(?i).*\\.(mp4|mkv|webm|avi|mov|3gp|m4v)$");
-        media.add(new Entry(uri.toString(), name, "Added files", isVideo, 0, true));
+        media.add(new Entry(uri.toString(), cleanName(name), "Added files", isVideo, 0, true));
     }
     private void saveImports() {
         JSONArray arr = new JSONArray();
@@ -413,12 +526,34 @@ public class PremiumActivity extends Activity {
             JSONArray arr = new JSONArray(saved);
             for (int n = 0; n < arr.length(); n++) {
                 JSONObject o = arr.getJSONObject(n);
-                media.add(new Entry(o.getString("uri"), o.getString("name"), "Added files", o.getBoolean("video"), 0, true));
+                media.add(new Entry(o.getString("uri"), cleanName(o.getString("name")), "Added files", o.getBoolean("video"), 0, true));
             }
         } catch (Exception ignored) { }
     }
 
-    private void start(int id) { prepare(id, true); showPlayer(); }
+    private String cleanName(String name) {
+        return name.replaceFirst("(?i)\\.(mp3|m4a|aac|wav|flac|ogg|opus|mp4|mkv|webm|avi|mov|3gp|m4v)$", "")
+            .replace('_', ' ').replaceAll("\\s+", " ").trim();
+    }
+    private void loadCollections() {
+        try {
+            JSONArray f = new JSONArray(getPreferences(0).getString("favorites", "[]"));
+            for (int i = 0; i < f.length(); i++) favorites.add(f.getString(i));
+            JSONArray r = new JSONArray(getPreferences(0).getString("recent", "[]"));
+            for (int i = 0; i < r.length(); i++) recentUris.add(r.getString(i));
+        } catch (Exception ignored) { }
+    }
+    private void saveCollections() {
+        getPreferences(0).edit().putString("favorites", new JSONArray(favorites).toString())
+            .putString("recent", new JSONArray(recentUris).toString()).apply();
+    }
+    private void start(int id) {
+        if (id < 0 || id >= media.size()) return;
+        String uri = media.get(id).uri;
+        recentUris.remove(uri); recentUris.add(0, uri);
+        while (recentUris.size() > 40) recentUris.remove(recentUris.size() - 1);
+        saveCollections(); prepare(id, true); showPlayer();
+    }
     private void prepare(int id, boolean auto) {
         if (id < 0 || id >= media.size()) return;
         if (active != id) savePosition();
@@ -427,7 +562,7 @@ public class PremiumActivity extends Activity {
         if (miniBar != null && !onPlayer) {
             miniBar.setVisibility(View.VISIBLE); miniTitle.setText(media.get(id).name);
         }
-        if (playerTitle != null) playerTitle.setText(media.get(id).name);
+        if (playerTitle != null) playerTitle.setText("NOW PLAYING");
         captions.clear(); if (captionView != null) captionView.setText("");
         Uri uri = Uri.parse(media.get(id).uri);
         try {
@@ -460,20 +595,35 @@ public class PremiumActivity extends Activity {
         if (active < 0 || active >= media.size()) return;
         onPlayer = true; homeList = null; miniBar = null; miniTitle = null; miniPlay = null;
         Entry e = media.get(active);
-        playerRoot = column(); base(playerRoot); playerView = playerRoot; setContentView(playerRoot);
-        playerTop = row(); padded(playerTop, 13, 10); playerRoot.addView(playerTop);
-        Button back = button("‹", this::leavePlayer); playerTop.addView(back, new LinearLayout.LayoutParams(dp(47), dp(43)));
-        playerTitle = text(e.name, 17, true, Color.WHITE); playerTitle.setSingleLine(true);
-        playerTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, dp(43), 1);
-        titleParams.leftMargin = dp(10); playerTop.addView(playerTitle, titleParams);
-        if (e.video && Build.VERSION.SDK_INT >= 26) {
-            playerTop.addView(button("▢", this::pictureInPicture), new LinearLayout.LayoutParams(dp(47), dp(43)));
-        }
-        addSpace(playerRoot, 11);
-        stage = new FrameLayout(this); stage.setBackground(glass(0xFF07101F, 18, 0x4CFFFFFF));
-        LinearLayout.LayoutParams stageParams = new LinearLayout.LayoutParams(-1, e.video ? dp(235) : dp(300));
-        stageParams.setMargins(dp(12), 0, dp(12), 0); playerRoot.addView(stage, stageParams);
+        FrameLayout background = new FrameLayout(this); background.setBackgroundColor(BG[theme]);
+        ambientArt = new ImageView(this); ambientArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        ambientArt.setAlpha(Build.VERSION.SDK_INT >= 31 ? .27f : .12f);
+        if (Build.VERSION.SDK_INT >= 31) ambientArt.setRenderEffect(RenderEffect.createBlurEffect(dp(40), dp(40), Shader.TileMode.CLAMP));
+        background.addView(ambientArt, new FrameLayout.LayoutParams(-1, -1));
+        View shade = new View(this);
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[]{0xB9000000, 0xC9000000, 0xF7000000}));
+        background.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+        playerRoot = column(); playerView = playerRoot;
+        background.addView(playerRoot, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(background);
+        if (!e.video) loadArt(ambientArt, e);
+
+        playerTop = row(); playerTop.setPadding(dp(19), dp(7), dp(19), dp(4)); playerRoot.addView(playerTop);
+        Button close = plainButton("⌄", this::leavePlayer, 31);
+        playerTop.addView(close, new LinearLayout.LayoutParams(dp(42), dp(48)));
+        playerTitle = text("NOW PLAYING", 11, true, 0xFFCFCFCF);
+        playerTitle.setGravity(Gravity.CENTER);
+        playerTop.addView(playerTitle, new LinearLayout.LayoutParams(0, dp(48), 1));
+        playerTop.addView(plainButton("⋮", this::playerMenu, 27), new LinearLayout.LayoutParams(dp(42), dp(48)));
+        addSpace(playerRoot, 17);
+
+        int width = getResources().getDisplayMetrics().widthPixels;
+        int albumSize = Math.min(width - dp(44), dp(380));
+        int stageHeight = e.video ? Math.round(albumSize * .62f) : albumSize;
+        stage = new FrameLayout(this); stage.setBackground(glass(0xFF181818, 15, 0x19FFFFFF));
+        LinearLayout.LayoutParams stageParams = new LinearLayout.LayoutParams(-1, stageHeight);
+        stageParams.setMargins(dp(22), 0, dp(22), 0); playerRoot.addView(stage, stageParams);
         if (e.video) {
             video = new VideoView(this); stage.addView(video, new FrameLayout.LayoutParams(-1, -1));
             video.setOnTouchListener(this::gesture);
@@ -482,65 +632,91 @@ public class PremiumActivity extends Activity {
             FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
             cp.setMargins(dp(16), 0, dp(16), dp(16)); stage.addView(captionView, cp);
         } else {
-            TextView artwork = text("♫", 110, true, ACCENT[theme]); artwork.setGravity(Gravity.CENTER);
-            artwork.setBackground(glass(0x815174A0, 18, 0x50FFFFFF));
-            stage.addView(artwork, new FrameLayout.LayoutParams(-1, -1));
+            TextView placeholder = text("♫", 96, false, 0xFF5C5C5C);
+            placeholder.setGravity(Gravity.CENTER);
+            stage.addView(placeholder, new FrameLayout.LayoutParams(-1, -1));
+            playerArt = new ImageView(this); playerArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            stage.addView(playerArt, new FrameLayout.LayoutParams(-1, -1));
+            loadArt(playerArt, e);
         }
         gestureHint = text("", 15, true, Color.WHITE); gestureHint.setGravity(Gravity.CENTER);
-        FrameLayout.LayoutParams hint = new FrameLayout.LayoutParams(-1, dp(55), Gravity.CENTER);
-        stage.addView(gestureHint, hint);
+        stage.addView(gestureHint, new FrameLayout.LayoutParams(-1, dp(55), Gravity.CENTER));
         lockButton = button("Unlock", () -> setLocked(false));
-        FrameLayout.LayoutParams lockParams = new FrameLayout.LayoutParams(dp(85), dp(46), Gravity.TOP | Gravity.RIGHT);
-        lockParams.setMargins(0, dp(12), dp(12), 0); stage.addView(lockButton, lockParams);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(85), dp(44), Gravity.TOP | Gravity.RIGHT);
+        lp.setMargins(0, dp(12), dp(12), 0); stage.addView(lockButton, lp);
         lockButton.setVisibility(View.GONE);
-        if (e.video) {
-            Button exit = button("⛶", this::toggleFullscreen);
-            FrameLayout.LayoutParams exitP = new FrameLayout.LayoutParams(dp(48), dp(43), Gravity.TOP | Gravity.LEFT);
-            exitP.setMargins(dp(12), dp(12), 0, 0); stage.addView(exit, exitP);
-        }
-        addSpace(playerRoot, 17);
-        ScrollView sc = new ScrollView(this); playerRoot.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1));
-        playerControls = column(); padded(playerControls, 19, 0); sc.addView(playerControls);
-        playerControls.addView(text(e.video ? "NOW PLAYING  /  VIDEO" : "NOW PLAYING  /  MUSIC", 11, true, ACCENT[theme]));
-        addSpace(playerControls, 7);
-        TextView title = text(e.name, 23, true, Color.WHITE); title.setMaxLines(2); playerControls.addView(title);
-        playerControls.addView(text(e.folder, 12, false, 0xFFB7C7D9)); addSpace(playerControls, 18);
-        progress = new SeekBar(this); progress.setProgressTintList(android.content.res.ColorStateList.valueOf(ACCENT[theme]));
+        addSpace(playerRoot, 22);
+
+        playerControls = column(); playerControls.setPadding(dp(25), 0, dp(25), dp(24));
+        playerRoot.addView(playerControls, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout info = row(); playerControls.addView(info);
+        LinearLayout names = column();
+        TextView song = text(e.name, 23, false, Color.WHITE); song.setSingleLine(true);
+        song.setEllipsize(android.text.TextUtils.TruncateAt.END); names.addView(song);
+        TextView artist = text(e.video ? e.folder : e.artist, 15, false, 0xFFAAAAAA);
+        artist.setSingleLine(true); artist.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        names.addView(artist);
+        info.addView(names, new LinearLayout.LayoutParams(0, dp(68), 1));
+        if (!e.video) {
+            Button star = plainButton(favorites.contains(e.uri) ? "★" : "☆", () -> toggleFavorite(e.uri), 30);
+            star.setTag(e.uri); info.addView(star, new LinearLayout.LayoutParams(dp(48), dp(52)));
+            favoriteButton = star;
+        } else favoriteButton = null;
+        View spacer = new View(this); playerControls.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1));
+
+        progress = new SeekBar(this); progress.setPadding(0, 0, 0, 0);
+        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(ACCENT[theme]));
         progress.setThumbTintList(android.content.res.ColorStateList.valueOf(ACCENT[theme]));
         progress.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             public void onStartTrackingTouch(SeekBar b) { scrubbing = true; }
-            public void onProgressChanged(SeekBar b, int v, boolean user) { if (user && time != null) time.setText(format(v) + " / " + format(duration())); }
+            public void onProgressChanged(SeekBar b, int v, boolean user) { if (user && time != null) time.setText(format(v) + "   /   " + format(duration())); }
             public void onStopTrackingTouch(SeekBar b) { scrubbing = false; jump(b.getProgress()); }
         });
         playerControls.addView(progress);
-        time = text("0:00  /  0:00", 12, false, 0xFFC5D2E4); time.setGravity(Gravity.RIGHT);
-        playerControls.addView(time); addSpace(playerControls, 13);
+        time = text("0:00   /   0:00", 12, false, 0xFF999999);
+        time.setGravity(Gravity.RIGHT); playerControls.addView(time);
+        addSpace(playerControls, 20);
         LinearLayout transport = row(); playerControls.addView(transport);
-        inRow(transport, button("−10", () -> jump(position() - 10000)), 1, 53);
-        inRow(transport, button("◀◀", this::previous), 1, 53);
-        play = button("▶", this::toggle); play.setTextSize(22);
-        play.setTextColor(BG[theme]); play.setBackground(glass(ACCENT[theme], 20, Color.WHITE));
-        inRow(transport, play, 1.3f, 56);
-        inRow(transport, button("▶▶", this::next), 1, 53);
-        inRow(transport, button("+10", () -> jump(position() + 10000)), 1, 53);
-        addSpace(playerControls, 22);
-        LinearLayout options = row(); playerControls.addView(options);
-        inRow(options, button("Speed " + speed + "×", this::speedDialog), 1, 47);
-        inRow(options, button("Repeat", () -> { repeat = !repeat; toast("Repeat " + (repeat ? "on" : "off")); }), 1, 47);
-        inRow(options, button("Shuffle", () -> { shuffle = !shuffle; toast("Shuffle " + (shuffle ? "on" : "off")); }), 1, 47);
-        addSpace(playerControls, 9);
-        LinearLayout more = row(); playerControls.addView(more);
-        if (e.video) {
-            inRow(more, button("Subtitles", this::pickSubtitle), 1, 47);
-            inRow(more, button("Lock", () -> setLocked(true)), 1, 47);
-            inRow(more, button("Fit / Zoom", this::toggleZoom), 1, 47);
-        } else {
-            inRow(more, button("Themes", this::themeDialog), 1, 47);
-            inRow(more, button("Add files", this::pickMedia), 1, 47);
-        }
-        addSpace(playerControls, 30);
+        inRow(transport, plainButton("⟲", () -> { repeat = !repeat; toast("Repeat " + (repeat ? "on" : "off")); }, 27), 1, 62);
+        inRow(transport, plainButton("|◀", this::previous, 25), 1, 62);
+        play = button("▶", this::toggle); play.setTextSize(29);
+        play.setBackground(glass(0x54FFFFFF, 40, 0x30FFFFFF));
+        inRow(transport, play, 1.4f, 70);
+        inRow(transport, plainButton("▶|", this::next, 25), 1, 62);
+        inRow(transport, plainButton("≡", this::queueDialog, 29), 1, 62);
         if (audio == null && !videoReady) prepare(active, true);
         else if (e.video && video != null && videoEngine == null) prepare(active, true);
+    }
+    private Button favoriteButton;
+    private void toggleFavorite(String uri) {
+        if (!favorites.add(uri)) favorites.remove(uri);
+        saveCollections();
+        if (favoriteButton != null) favoriteButton.setText(favorites.contains(uri) ? "★" : "☆");
+    }
+    private void queueDialog() {
+        ArrayList<Integer> ids = new ArrayList<>();
+        for (int i = 0; i < media.size(); i++) if (active >= 0 && media.get(i).video == media.get(active).video) ids.add(i);
+        String[] labels = new String[Math.min(ids.size(), 100)];
+        for (int n = 0; n < labels.length; n++) labels[n] = media.get(ids.get(n)).name;
+        new AlertDialog.Builder(this).setTitle("Play queue").setItems(labels, (d, which) -> {
+            savePosition(); release(); active = ids.get(which); showPlayer();
+        }).show();
+    }
+    private void playerMenu() {
+        Entry e = media.get(active);
+        String[] names = e.video ? new String[]{"Playback speed", "Subtitles (.srt)", "Picture-in-Picture", "Fit / Zoom", "Lock controls", "Full screen", "Appearance"}
+            : new String[]{"Playback speed", "Shuffle", "Add files", "Appearance"};
+        new AlertDialog.Builder(this).setItems(names, (d, n) -> {
+            if (e.video) {
+                if (n == 0) speedDialog(); else if (n == 1) pickSubtitle();
+                else if (n == 2) pictureInPicture(); else if (n == 3) toggleZoom();
+                else if (n == 4) setLocked(true); else if (n == 5) toggleFullscreen();
+                else themeDialog();
+            } else {
+                if (n == 0) speedDialog(); else if (n == 1) { shuffle = !shuffle; toast("Shuffle " + (shuffle ? "on" : "off")); }
+                else if (n == 2) pickMedia(); else themeDialog();
+            }
+        }).show();
     }
     private void leavePlayer() {
         if (fullscreen) toggleFullscreen();
