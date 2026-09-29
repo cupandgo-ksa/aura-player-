@@ -268,7 +268,7 @@ public class GlassActivity extends Activity {
         }
     }
     @Override public void onBackPressed() {
-        web.evaluateJavascript("(function(){var open=!!document.querySelector('[data-audio-menu], [data-player-popover], [class*=fixed][class*=inset-0]');window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));return open})()", value -> {
+        web.evaluateJavascript("(function(){var open=!!document.querySelector('[data-audio-menu], [data-header-menu=open], [data-player-popover], [class*=fixed][class*=inset-0]');window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));return open})()", value -> {
             if (!"true".equals(value)) moveTaskToBack(true);
         });
     }
