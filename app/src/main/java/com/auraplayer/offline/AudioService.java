@@ -169,7 +169,7 @@ public class AudioService extends Service {
         return PendingIntent.getService(this, request, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
     private Notification notification() {
-        Intent launch = new Intent(this, PremiumActivity.class);
+        Intent launch = new Intent(this, GlassActivity.class);
         PendingIntent open = PendingIntent.getActivity(this, 1, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         session.setMetadata(new MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, artist).putLong(MediaMetadata.METADATA_KEY_DURATION, duration()).build());
@@ -181,7 +181,7 @@ public class AudioService extends Service {
                 position(), speed).build());
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
         if (Build.VERSION.SDK_INT < 26) builder.setPriority(Notification.PRIORITY_LOW);
-        return builder.setSmallIcon(com.auraplayer.offline.R.drawable.ic_launcher)
+        return builder.setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title).setContentText(artist).setContentIntent(open).setOngoing(isPlaying())
             .setColor(Color.DKGRAY).setVisibility(Notification.VISIBILITY_PUBLIC)
             .addAction(new Notification.Action.Builder(R.drawable.ic_music_prev, "Previous", action(PREVIOUS, 2)).build())

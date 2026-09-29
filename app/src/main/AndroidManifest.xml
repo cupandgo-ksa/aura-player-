@@ -5,9 +5,10 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <application android:allowBackup="false" android:label="AURA Player" android:icon="@drawable/ic_launcher"
         android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
-        <activity android:name=".PremiumActivity" android:exported="true"
+        <activity android:name=".GlassActivity" android:exported="true"
             android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout">
             <intent-filter>
