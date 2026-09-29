@@ -92,6 +92,7 @@ public class GlassActivity extends Activity {
                 Log.e("AURA_WEB", "WebView error " + request.getUrl() + " " + error.getDescription());
             }
             @Override public void onPageFinished(WebView view, String url) {
+                Log.d("AURA_WEB", "Page finished: " + url);
                 new android.os.Handler(getMainLooper()).postDelayed(() ->
                     web.evaluateJavascript("document.getElementById('root')?.innerHTML.length ?? -1",
                         result -> Log.d("AURA_WEB", "Root length " + result)), 8000);
@@ -108,6 +109,9 @@ public class GlassActivity extends Activity {
             web.loadDataWithBaseURL(ORIGIN + "/", new String(bytes, 0, size, java.nio.charset.StandardCharsets.UTF_8),
                 "text/html", "UTF-8", null);
         } catch (Exception error) { Log.e("AURA_WEB", "Could not open interface", error); }
+        new android.os.Handler(getMainLooper()).postDelayed(() -> web.evaluateJavascript(
+            "JSON.stringify({url:location.href,ready:document.readyState,root:document.getElementById('root')?.innerHTML.length,script:document.scripts.length})",
+            result -> Log.d("AURA_WEB", "Web state " + result)), 11000);
         requestMedia();
     }
 

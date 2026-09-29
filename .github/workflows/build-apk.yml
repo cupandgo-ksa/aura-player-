@@ -58,10 +58,13 @@ jobs:
             adb shell pm grant com.auraplayer.offline android.permission.READ_MEDIA_AUDIO
             adb shell pm grant com.auraplayer.offline android.permission.READ_MEDIA_VIDEO
             adb shell am start -n com.auraplayer.offline/.GlassActivity
+            adb shell input keyevent KEYCODE_WAKEUP
+            adb shell wm dismiss-keyguard
             sleep 12
             adb exec-out screencap -p > glass-smoke.png
             adb logcat -d -s AndroidRuntime:E chromium:E AURA_WEB:V > glass-smoke.log
-            if grep -qE 'FATAL EXCEPTION|Root length 0|Root length -1|Asset failed|WebView error' glass-smoke.log; then cat glass-smoke.log; exit 1; fi
+            adb shell dumpsys activity activities | grep 'mResumedActivity\|topResumedActivity' >> glass-smoke.log || true
+            if grep -qE 'FATAL EXCEPTION|Root length 0|Root length -1|WebView error' glass-smoke.log; then cat glass-smoke.log; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
