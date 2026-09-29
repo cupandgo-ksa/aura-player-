@@ -347,14 +347,18 @@ export const App: React.FC = () => {
     // Pause audio player first
     audioEngine.pause();
     setIsPlaying(false);
-    if (window.AuraNative) { window.AuraNative.openVideo(track.url); return; }
+    if (window.AuraNative) {
+      setActiveVideoTrack({ ...track, url: `https://aura.local/media?u=${encodeURIComponent(track.url)}` });
+      setIsVideoPlayerOpen(true);
+      return;
+    }
     setActiveVideoTrack(track);
     setIsVideoPlayerOpen(true);
   };
 
   const handlePlayVideoAsAudio = (track: Track) => {
     // Play video track in background audio player
-    handlePlayTrack(track);
+    handlePlayTrack(tracks.find((item) => item.id === track.id) || track);
   };
 
   // Playlist Actions

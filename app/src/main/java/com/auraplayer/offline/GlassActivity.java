@@ -3,6 +3,8 @@ package com.auraplayer.offline;
 import android.Manifest;
 import android.app.Activity;
 import android.content.ContentUris;
+import android.content.res.AssetFileDescriptor;
+import android.content.res.AssetFileDescriptor;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -34,9 +36,15 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.FilterInputStream;
+import java.io.FilterInputStream;
 import java.io.InputStream;
 import java.net.URLConnection;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Locale;
 
 public class GlassActivity extends Activity {
@@ -74,6 +82,18 @@ public class GlassActivity extends Activity {
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
                 try {
                     if ("/cover".equals(uri.getPath())) return cover(uri.getQueryParameter("u"));
+                    if ("/media".equals(uri.getPath())) {
+                        String range = null;
+                        for (Map.Entry<String, String> header : request.getRequestHeaders().entrySet())
+                            if ("range".equalsIgnoreCase(header.getKey())) range = header.getValue();
+                        return media(uri.getQueryParameter("u"), range);
+                    }
+                    if ("/media".equals(uri.getPath())) {
+                        String range = null;
+                        for (Map.Entry<String, String> header : request.getRequestHeaders().entrySet())
+                            if ("range".equalsIgnoreCase(header.getKey())) range = header.getValue();
+                        return media(uri.getQueryParameter("u"), range);
+                    }
                     String path = uri.getPath();
                     path = path == null || path.equals("/") ? "index.html" : path.replaceFirst("^/", "");
                     if (path.contains("..")) return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
@@ -197,6 +217,110 @@ public class GlassActivity extends Activity {
             }
         } catch (Exception ignored) { }
     }
+    /** Stream a selected local video from the app's offline origin so the bundled player can seek. */
+    private WebResourceResponse media(String value, String range) throws Exception {
+        if (value == null || !value.startsWith("content://"))
+            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+        Uri item = Uri.parse(value);
+        AssetFileDescriptor descriptor = getContentResolver().openAssetFileDescriptor(item, "r");
+        if (descriptor == null) throw new java.io.FileNotFoundException(value);
+        long length = descriptor.getLength();
+        long start = 0, end = length > 0 ? length - 1 : -1;
+        boolean partial = false;
+        if (length > 0 && range != null && range.startsWith("bytes=")) {
+            try {
+                String[] parts = range.substring(6).split("-", 2);
+                start = Math.max(0, Math.min(length - 1, Long.parseLong(parts[0])));
+                if (parts.length > 1 && !parts[1].isEmpty()) end = Math.min(end, Long.parseLong(parts[1]));
+                end = Math.max(start, end);
+                partial = true;
+            } catch (NumberFormatException ignored) { start = 0; end = length - 1; }
+        }
+        InputStream raw = descriptor.createInputStream();
+        long skipped = 0;
+        while (skipped < start) {
+            long n = raw.skip(start - skipped);
+            if (n <= 0) { raw.close(); throw new java.io.EOFException("Media range unavailable"); }
+            skipped += n;
+        }
+        final long count = end < 0 ? Long.MAX_VALUE : end - start + 1;
+        InputStream body = new FilterInputStream(raw) {
+            long remaining = count;
+            @Override public int read() throws java.io.IOException {
+                if (remaining <= 0) return -1;
+                int n = super.read(); if (n >= 0) remaining--; return n;
+            }
+            @Override public int read(byte[] b, int off, int len) throws java.io.IOException {
+                if (remaining <= 0) return -1;
+                int n = super.read(b, off, (int)Math.min(len, remaining));
+                if (n > 0) remaining -= n; return n;
+            }
+        };
+        String mime = getContentResolver().getType(item);
+        if (mime == null || !mime.startsWith("video/")) mime = "video/mp4";
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept-Ranges", "bytes");
+        headers.put("Cache-Control", "no-store");
+        if (length > 0) {
+            headers.put("Content-Length", Long.toString(count));
+            if (partial) headers.put("Content-Range", "bytes " + start + "-" + end + "/" + length);
+        }
+        return new WebResourceResponse(mime, null, partial ? 206 : 200,
+            partial ? "Partial Content" : "OK", headers, body);
+    }
+
+    /** Stream a selected local video from the app's offline origin so the bundled player can seek. */
+    private WebResourceResponse media(String value, String range) throws Exception {
+        if (value == null || !value.startsWith("content://"))
+            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+        Uri item = Uri.parse(value);
+        AssetFileDescriptor descriptor = getContentResolver().openAssetFileDescriptor(item, "r");
+        if (descriptor == null) throw new java.io.FileNotFoundException(value);
+        long length = descriptor.getLength();
+        long start = 0, end = length > 0 ? length - 1 : -1;
+        boolean partial = false;
+        if (length > 0 && range != null && range.startsWith("bytes=")) {
+            try {
+                String[] parts = range.substring(6).split("-", 2);
+                start = Math.max(0, Math.min(length - 1, Long.parseLong(parts[0])));
+                if (parts.length > 1 && !parts[1].isEmpty()) end = Math.min(end, Long.parseLong(parts[1]));
+                end = Math.max(start, end);
+                partial = true;
+            } catch (NumberFormatException ignored) { start = 0; end = length - 1; }
+        }
+        InputStream raw = descriptor.createInputStream();
+        long skipped = 0;
+        while (skipped < start) {
+            long n = raw.skip(start - skipped);
+            if (n <= 0) { raw.close(); throw new java.io.EOFException("Media range unavailable"); }
+            skipped += n;
+        }
+        final long count = end < 0 ? Long.MAX_VALUE : end - start + 1;
+        InputStream body = new FilterInputStream(raw) {
+            long remaining = count;
+            @Override public int read() throws java.io.IOException {
+                if (remaining <= 0) return -1;
+                int n = super.read(); if (n >= 0) remaining--; return n;
+            }
+            @Override public int read(byte[] b, int off, int len) throws java.io.IOException {
+                if (remaining <= 0) return -1;
+                int n = super.read(b, off, (int)Math.min(len, remaining));
+                if (n > 0) remaining -= n; return n;
+            }
+        };
+        String mime = getContentResolver().getType(item);
+        if (mime == null || !mime.startsWith("video/")) mime = "video/mp4";
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept-Ranges", "bytes");
+        headers.put("Cache-Control", "no-store");
+        if (length > 0) {
+            headers.put("Content-Length", Long.toString(count));
+            if (partial) headers.put("Content-Range", "bytes " + start + "-" + end + "/" + length);
+        }
+        return new WebResourceResponse(mime, null, partial ? 206 : 200,
+            partial ? "Partial Content" : "OK", headers, body);
+    }
+
     private WebResourceResponse cover(String value) {
         if (value != null && value.startsWith("content://")) {
             MediaMetadataRetriever retriever = new MediaMetadataRetriever();

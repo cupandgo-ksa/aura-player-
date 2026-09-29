@@ -276,7 +276,7 @@ export const AudioTab: React.FC<AudioTabProps> = ({
                     onPlayTrack(track);
                   }
                 }}
-                className={`group relative glass-card glass-card-hover rounded-2xl p-3 flex items-center gap-3.5 cursor-pointer border transition-all ${
+                className={`group relative glass-card glass-card-hover rounded-2xl p-3 flex items-center gap-3.5 cursor-pointer border transition-all ${activeMenuTrackId === track.id ? 'z-[60]' : 'z-0'} ${
                   isThisTrackActive
                     ? 'border-purple-400/50 bg-purple-950/30 shadow-lg shadow-purple-900/30'
                     : 'border-white/10 hover:border-white/20'
@@ -364,7 +364,7 @@ export const AudioTab: React.FC<AudioTabProps> = ({
 
                     {/* Dropdown Menu */}
                     {activeMenuTrackId === track.id && (
-                      <div className="absolute right-0 top-8 w-48 rounded-2xl glass-panel p-2 shadow-2xl z-50 border border-white/20 space-y-1">
+                      <div className="absolute right-0 top-8 w-48 rounded-2xl glass-panel p-2 shadow-2xl z-[70] border border-white/20 space-y-1">
                         <button
                           onClick={() => {
                             onAddToQueue(track);
