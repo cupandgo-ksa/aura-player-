@@ -184,9 +184,10 @@ public class AudioService extends Service {
         return builder.setSmallIcon(com.auraplayer.offline.R.drawable.ic_launcher)
             .setContentTitle(title).setContentText(artist).setContentIntent(open).setOngoing(isPlaying())
             .setColor(Color.DKGRAY).setVisibility(Notification.VISIBILITY_PUBLIC)
-            .addAction(new Notification.Action.Builder(com.auraplayer.offline.R.drawable.ic_launcher, "Previous", action(PREVIOUS, 2)).build())
-            .addAction(new Notification.Action.Builder(com.auraplayer.offline.R.drawable.ic_launcher, isPlaying() ? "Pause" : "Play", action(TOGGLE, 3)).build())
-            .addAction(new Notification.Action.Builder(com.auraplayer.offline.R.drawable.ic_launcher, "Next", action(NEXT, 4)).build())
+            .addAction(new Notification.Action.Builder(R.drawable.ic_music_prev, "Previous", action(PREVIOUS, 2)).build())
+            .addAction(new Notification.Action.Builder(isPlaying() ? R.drawable.ic_music_pause : R.drawable.ic_music_play,
+                isPlaying() ? "Pause" : "Play", action(TOGGLE, 3)).build())
+            .addAction(new Notification.Action.Builder(R.drawable.ic_music_next, "Next", action(NEXT, 4)).build())
             .setStyle(new Notification.MediaStyle().setMediaSession(session.getSessionToken()).setShowActionsInCompactView(0, 1, 2))
             .build();
     }

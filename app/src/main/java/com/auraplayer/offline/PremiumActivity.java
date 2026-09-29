@@ -93,7 +93,10 @@ public class PremiumActivity extends Activity {
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             AudioService service = AudioService.instance;
-            if (service != null && !service.uri.isEmpty() && (active < 0 || !media.get(active).uri.equals(service.uri))) {
+            if (service != null && pendingAudioUri.equals(service.uri)) pendingAudioUri = "";
+            if (service != null && !service.uri.isEmpty() &&
+                (pendingAudioUri.isEmpty() || pendingAudioUri.equals(service.uri)) &&
+                (active < 0 || !media.get(active).uri.equals(service.uri))) {
                 for (int i = 0; i < media.size(); i++) if (media.get(i).uri.equals(service.uri)) {
                     active = i;
                     if (onPlayer) showPlayer(); else showHome();
@@ -694,11 +697,11 @@ public class PremiumActivity extends Activity {
         addSpace(playerControls, 20);
         LinearLayout transport = row(); playerControls.addView(transport);
         inRow(transport, plainButton("⟲", () -> { repeat = !repeat; toast("Repeat " + (repeat ? "on" : "off")); }, 27), 1, 62);
-        inRow(transport, plainButton("|◀", this::previous, 25), 1, 62);
+        inRow(transport, plainButton("⏮", this::previous, 25), 1, 62);
         play = button("▶", this::toggle); play.setTextSize(29);
         play.setBackground(glass(0x54FFFFFF, 40, 0x30FFFFFF));
         inRow(transport, play, 1.4f, 70);
-        inRow(transport, plainButton("▶|", this::next, 25), 1, 62);
+        inRow(transport, plainButton("⏭", this::next, 25), 1, 62);
         inRow(transport, plainButton("≡", this::queueDialog, 29), 1, 62);
         if (!e.video && !e.uri.equals(pendingAudioUri) &&
             (AudioService.instance == null || !e.uri.equals(AudioService.instance.uri))) prepare(active, true);
