@@ -57,12 +57,7 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.auraplayer.offline android.permission.READ_MEDIA_AUDIO
-            python3 - <<'PY'
-            import math, wave, struct
-            with wave.open('aura-smoke.wav','wb') as f:
-                f.setnchannels(1); f.setsampwidth(2); f.setframerate(22050)
-                f.writeframes(b''.join(struct.pack('<h',int(3000*math.sin(2*math.pi*440*i/22050))) for i in range(22050*8)))
-            PY
+            python3 -c 'import math,wave,struct; f=wave.open("aura-smoke.wav","wb"); f.setparams((1,2,22050,0,"NONE","not compressed")); f.writeframes(b"".join(struct.pack("<h",int(3000*math.sin(2*math.pi*440*i/22050))) for i in range(22050*8))); f.close()'
             adb shell mkdir -p /sdcard/Music
             adb push aura-smoke.wav /sdcard/Music/aura-smoke.wav
             adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Music/aura-smoke.wav
