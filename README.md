@@ -8,6 +8,8 @@ An ad-free, local audio/video player. No account, analytics SDK, ad SDK, or `INT
 
 **GitHub cloud build:** The included `.github/workflows/build-apk.yml` can compile an installable debug APK in a separate private repository using GitHub Actions. Place the *contents* of this folder at the repository root. On a successful workflow run, download the `AURA-Player-APK` artifact. Do not add this personal app to an unrelated public repository.
 
+The private repository includes a stable *debug-only* keystore so future test APKs install over this version. Keep the repository private. Users of the very first APK (built before this key was added) need to uninstall that first version once before installing this one; uninstalling clears its app data and imported-file list.
+
 Open this folder in Android Studio. Install Android SDK 35 and JDK 17 if prompted; let Android Studio sync the project with Gradle 8.9 (Android Gradle Plugin 8.7.3). Build > Build Bundle(s) / APK(s) > Build APK(s), then install the debug APK on your phone. This source package has no Gradle wrapper or prebuilt APK. Initial build needs Gradle/plugin downloads; the installed player itself runs offline.
 
 ## Use
