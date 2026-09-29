@@ -1,4 +1,4 @@
-name: Build A S Media Player APK
+name: Build A S media-player APK
 on:
   workflow_dispatch:
   push:
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Build A S Media Player interface for offline Android assets
+      - name: Build A S media-player interface for offline Android assets
         run: |
           cd web
           npm install --no-audit --no-fund
@@ -37,7 +37,7 @@ jobs:
         run: gradle :app:assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: A-S-Media-Player-APK
+          name: A-S-media-player-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Enable emulator acceleration
