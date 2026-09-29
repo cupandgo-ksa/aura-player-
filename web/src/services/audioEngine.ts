@@ -24,7 +24,11 @@ export class AudioEngine {
   private bassBoostNode: BiquadFilterNode | null = null;
   private trebleBoostNode: BiquadFilterNode | null = null;
   public analyserNode: AnalyserNode | null = null;
+  private pannerNode: StereoPannerNode | null = null;
   private gainNode: GainNode | null = null;
+  private superBoostMultiplier: number = 1.0;
+  private isEightDActive: boolean = false;
+  private eightDAnimationId: number | null = null;
   private isInitialized = false;
   private nativeTrack: Track | null = null;
   private pendingUri = '';
@@ -108,11 +112,17 @@ export class AudioEngine {
       this.analyserNode.fftSize = 128;
       this.analyserNode.smoothingTimeConstant = 0.8;
 
-      // Master gain
+      // Stereo Panner for 8D Spatial Audio
+      if (this.audioCtx.createStereoPanner) {
+        this.pannerNode = this.audioCtx.createStereoPanner();
+      }
+
+      // Master gain for Super Volume Boost (up to 200%)
       this.gainNode = this.audioCtx.createGain();
+      this.gainNode.gain.value = this.superBoostMultiplier;
 
       // Connect pipeline:
-      // Source -> BassBoost -> EQ Bands (0..4) -> TrebleBoost -> Analyser -> MasterGain -> Destination
+      // Source -> BassBoost -> EQ Bands (0..4) -> TrebleBoost -> Analyser -> Panner -> MasterGain -> Destination
       let lastNode: AudioNode = this.sourceNode;
       lastNode.connect(this.bassBoostNode);
       lastNode = this.bassBoostNode;
@@ -126,7 +136,14 @@ export class AudioEngine {
       lastNode = this.trebleBoostNode;
 
       lastNode.connect(this.analyserNode);
-      this.analyserNode.connect(this.gainNode);
+      lastNode = this.analyserNode;
+
+      if (this.pannerNode) {
+        lastNode.connect(this.pannerNode);
+        lastNode = this.pannerNode;
+      }
+
+      lastNode.connect(this.gainNode);
       this.gainNode.connect(this.audioCtx.destination);
 
       this.isInitialized = true;
@@ -144,10 +161,7 @@ export class AudioEngine {
   public setTrack(track: Track, autoPlay = true): void {
     if (window.AuraNative) {
       this.nativeTrack = track;
-      if (autoPlay) {
-        this.pendingUri = track.url;
-        window.AuraNative.play(track.url, track.title, track.artist);
-      }
+      if (autoPlay) { this.pendingUri = track.url; window.AuraNative.play(track.url, track.title, track.artist); }
       return;
     }
     this.initAudioContext();
@@ -169,7 +183,7 @@ export class AudioEngine {
     if (window.AuraNative) {
       if (this.nativeTrack) {
         let current = '';
-        try { current = JSON.parse(window.AuraNative.state()).uri; } catch { /* empty */ }
+        try { current = JSON.parse(window.AuraNative.state()).uri; } catch { /* starting */ }
         if (current === this.nativeTrack.url) window.AuraNative.resume();
         else { this.pendingUri = this.nativeTrack.url; window.AuraNative.play(this.nativeTrack.url, this.nativeTrack.title, this.nativeTrack.artist); }
       }
@@ -187,8 +201,8 @@ export class AudioEngine {
 
   public togglePlay(): void {
     if (window.AuraNative) {
-      let state: any = {};
-      try { state = JSON.parse(window.AuraNative.state()); } catch { /* empty */ }
+      let state: { playing?: boolean } = {};
+      try { state = JSON.parse(window.AuraNative.state()); } catch { /* starting */ }
       if (state.playing) this.pause(); else void this.play();
       return;
     }
@@ -244,6 +258,60 @@ export class AudioEngine {
     }
   }
 
+  public setSuperVolumeBoost(multiplier: number): void {
+    if (window.AuraNative) return;
+    this.superBoostMultiplier = Math.max(1.0, Math.min(2.0, multiplier));
+    if (this.gainNode && this.audioCtx) {
+      try {
+        this.gainNode.gain.setTargetAtTime(this.superBoostMultiplier, this.audioCtx.currentTime, 0.05);
+      } catch {
+        this.gainNode.gain.value = this.superBoostMultiplier;
+      }
+    }
+  }
+
+  public getSuperVolumeBoost(): number {
+    return this.superBoostMultiplier;
+  }
+
+  public setEightDMode(enabled: boolean): void {
+    if (window.AuraNative) return;
+    this.isEightDActive = enabled;
+    if (!this.pannerNode || !this.audioCtx) return;
+
+    if (!enabled) {
+      if (this.eightDAnimationId) {
+        cancelAnimationFrame(this.eightDAnimationId);
+        this.eightDAnimationId = null;
+      }
+      try {
+        this.pannerNode.pan.setTargetAtTime(0, this.audioCtx.currentTime, 0.1);
+      } catch {
+        this.pannerNode.pan.value = 0;
+      }
+      return;
+    }
+
+    const startTime = performance.now();
+    const cycleDuration = 7500; // 7.5 seconds per full 360 circle
+    const animatePan = () => {
+      if (!this.isEightDActive || !this.pannerNode || !this.audioCtx) return;
+      const elapsed = performance.now() - startTime;
+      const panValue = Math.sin((elapsed / cycleDuration) * Math.PI * 2) * 0.85;
+      try {
+        this.pannerNode.pan.setValueAtTime(panValue, this.audioCtx.currentTime);
+      } catch {
+        this.pannerNode.pan.value = panValue;
+      }
+      this.eightDAnimationId = requestAnimationFrame(animatePan);
+    };
+    this.eightDAnimationId = requestAnimationFrame(animatePan);
+  }
+
+  public isEightD(): boolean {
+    return this.isEightDActive;
+  }
+
   public getVisualizerData(dataArray: Uint8Array): void {
     if (this.analyserNode) {
       this.analyserNode.getByteFrequencyData(dataArray as any);
@@ -265,12 +333,11 @@ export class AudioEngine {
         try {
           const state = JSON.parse(window.AuraNative!.state());
           if (this.pendingUri && state.uri === this.pendingUri) this.pendingUri = '';
-          if (!this.pendingUri && state.uri && this.nativeTrack?.url !== state.uri) {
+          if (!this.pendingUri && state.uri && this.nativeTrack?.url !== state.uri)
             window.dispatchEvent(new CustomEvent('auraNativeTrack', { detail: state.uri }));
-          }
           this.onTimeUpdateCallback?.((state.position || 0) / 1000, (state.duration || 0) / 1000);
           this.onStateChangeCallback?.(!!state.playing);
-        } catch { /* service may be starting */ }
+        } catch { /* starting */ }
       }, 450);
     }
   }
@@ -308,8 +375,8 @@ export class AudioEngine {
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: track.title,
-        artist: track.artist || 'Aura Player',
-        album: track.album || 'Aura Glass Collection',
+        artist: track.artist || 'A S Media Player',
+        album: track.album || 'My music',
         artwork: [
           { src: track.coverUrl, sizes: '96x96', type: 'image/jpeg' },
           { src: track.coverUrl, sizes: '256x256', type: 'image/jpeg' },

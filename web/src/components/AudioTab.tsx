@@ -10,6 +10,9 @@ import {
   Clock,
   Sparkles,
   Volume2,
+  Scissors,
+  Tag,
+  Bookmark,
 } from 'lucide-react';
 import { Track, Playlist } from '../types/media';
 
@@ -24,8 +27,13 @@ interface AudioTabProps {
   onOpenImport: () => void;
   playlists: Playlist[];
   onAddTrackToPlaylist: (playlistId: string, trackId: string) => void;
+  onOpenCutter?: (track: Track) => void;
+  onOpenTagEditor?: (track: Track) => void;
+  onOpenBookmarks?: (track: Track) => void;
   lang: 'bn' | 'en';
 }
+
+export type AudioSearchScope = 'all' | 'title' | 'artist' | 'album';
 
 export const AudioTab: React.FC<AudioTabProps> = ({
   tracks,
@@ -38,9 +46,13 @@ export const AudioTab: React.FC<AudioTabProps> = ({
   onOpenImport,
   playlists,
   onAddTrackToPlaylist,
+  onOpenCutter,
+  onOpenTagEditor,
+  onOpenBookmarks,
   lang,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchScope, setSearchScope] = useState<AudioSearchScope>('all');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'title' | 'duration'>('recent');
   const [activeMenuTrackId, setActiveMenuTrackId] = useState<string | null>(null);
@@ -55,11 +67,23 @@ export const AudioTab: React.FC<AudioTabProps> = ({
   }, [audioTracks]);
 
   const filteredTracks = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
     let result = audioTracks.filter((t) => {
-      const matchSearch =
-        t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (t.album && t.album.toLowerCase().includes(searchQuery.toLowerCase()));
+      let matchSearch = true;
+      if (q) {
+        if (searchScope === 'title') {
+          matchSearch = t.title.toLowerCase().includes(q);
+        } else if (searchScope === 'artist') {
+          matchSearch = t.artist.toLowerCase().includes(q);
+        } else if (searchScope === 'album') {
+          matchSearch = Boolean(t.album && t.album.toLowerCase().includes(q));
+        } else {
+          matchSearch =
+            t.title.toLowerCase().includes(q) ||
+            t.artist.toLowerCase().includes(q) ||
+            Boolean(t.album && t.album.toLowerCase().includes(q));
+        }
+      }
 
       const matchGenre = selectedGenre === 'all' || t.genre === selectedGenre;
       return matchSearch && matchGenre;
@@ -74,7 +98,7 @@ export const AudioTab: React.FC<AudioTabProps> = ({
     }
 
     return result;
-  }, [audioTracks, searchQuery, selectedGenre, sortBy]);
+  }, [audioTracks, searchQuery, searchScope, selectedGenre, sortBy]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -84,59 +108,106 @@ export const AudioTab: React.FC<AudioTabProps> = ({
 
   return (
     <div className="pb-36 pt-2 px-4 max-w-4xl mx-auto space-y-4">
-      {/* Search & Action Bar */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={
-              lang === 'bn' ? 'গান বা শিল্পীর নাম খুঁজুন...' : 'Search songs, artists...'
-            }
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl glass-card border border-white/10 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-purple-400/50 transition backdrop-blur-xl"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        {/* Sort & Quick Actions */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center glass-pill rounded-2xl px-3 py-1.5 text-xs text-slate-300">
-            <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-purple-300" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              aria-label={lang === 'bn' ? 'বাছাই করুন' : 'Sort by'}
-              className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
-            >
-              <option value="recent" className="bg-slate-900 text-white">
-                {lang === 'bn' ? 'সর্বশেষ যোগ' : 'Recently Added'}
-              </option>
-              <option value="title" className="bg-slate-900 text-white">
-                {lang === 'bn' ? 'নাম অনুসারে' : 'Title (A-Z)'}
-              </option>
-              <option value="duration" className="bg-slate-900 text-white">
-                {lang === 'bn' ? 'দৈর্ঘ্য' : 'Duration'}
-              </option>
-            </select>
+      {/* Top Search & Filter Bar */}
+      <div className="glass-card rounded-3xl p-3 sm:p-4 border border-purple-500/20 bg-slate-900/60 shadow-xl space-y-2.5 backdrop-blur-2xl">
+        <div className="flex flex-col sm:flex-row gap-2.5">
+          {/* Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={
+                searchScope === 'title'
+                  ? lang === 'bn' ? 'গানের নাম দিয়ে খুঁজুন...' : 'Search by track title...'
+                  : searchScope === 'artist'
+                  ? lang === 'bn' ? 'শিল্পীর নাম দিয়ে খুঁজুন...' : 'Search by artist name...'
+                  : searchScope === 'album'
+                  ? lang === 'bn' ? 'অ্যালবাম নাম দিয়ে খুঁজুন...' : 'Search by album name...'
+                  : lang === 'bn' ? 'গান, শিল্পী বা অ্যালবাম খুঁজুন...' : 'Search title, artist, or album...'
+              }
+              className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white/5 border border-white/10 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-purple-400/50 transition backdrop-blur-xl"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-xs text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 transition"
+                title="Clear"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
-          <button
-            onClick={onOpenImport}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-purple-600/30 hover:bg-purple-600/40 border border-purple-400/30 text-xs font-semibold text-purple-200 transition active:scale-95"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{lang === 'bn' ? 'অডিও যোগ' : 'Add Audio'}</span>
-          </button>
+          {/* Sort & Quick Actions */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex items-center glass-pill rounded-2xl px-3 py-2 text-xs text-slate-300">
+              <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-purple-300" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                aria-label={lang === 'bn' ? 'বাছাই করুন' : 'Sort by'}
+                className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+              >
+                <option value="recent" className="bg-slate-900 text-white">
+                  {lang === 'bn' ? 'সর্বশেষ যোগ' : 'Recently Added'}
+                </option>
+                <option value="title" className="bg-slate-900 text-white">
+                  {lang === 'bn' ? 'নাম অনুসারে' : 'Title (A-Z)'}
+                </option>
+                <option value="duration" className="bg-slate-900 text-white">
+                  {lang === 'bn' ? 'দৈর্ঘ্য' : 'Duration'}
+                </option>
+              </select>
+            </div>
+
+            <button
+              onClick={onOpenImport}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-purple-600/30 hover:bg-purple-600/40 border border-purple-400/30 text-xs font-semibold text-purple-200 transition active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'অডিও যোগ' : 'Add Audio'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Search Scope Filter Chips (All, Title, Artist, Album) */}
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            <span className="text-[11px] text-slate-400 font-medium mr-1 hidden sm:inline">
+              {lang === 'bn' ? 'ফিল্টার:' : 'Filter:'}
+            </span>
+            {(
+              [
+                { id: 'all', labelBn: 'সবগুলো', labelEn: 'All' },
+                { id: 'title', labelBn: 'গানের নাম', labelEn: 'Title' },
+                { id: 'artist', labelBn: 'শিল্পী', labelEn: 'Artist' },
+                { id: 'album', labelBn: 'অ্যালবাম', labelEn: 'Album' },
+              ] as const
+            ).map((scope) => {
+              const isActive = searchScope === scope.id;
+              return (
+                <button
+                  key={scope.id}
+                  onClick={() => setSearchScope(scope.id)}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-medium transition active:scale-95 whitespace-nowrap ${
+                    isActive
+                      ? 'bg-purple-600 text-white shadow-md border border-purple-400/40'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5'
+                  }`}
+                >
+                  {lang === 'bn' ? scope.labelBn : scope.labelEn}
+                </button>
+              );
+            })}
+          </div>
+
+          {searchQuery && (
+            <div className="text-[11px] font-mono text-purple-300 whitespace-nowrap">
+              {filteredTracks.length} {lang === 'bn' ? 'টি গান' : 'found'}
+            </div>
+          )}
         </div>
       </div>
 
@@ -302,11 +373,50 @@ export const AudioTab: React.FC<AudioTabProps> = ({
                             onAddToQueue(track);
                             setActiveMenuTrackId(null);
                           }}
-                          className="w-full text-left px-3 py-2 rounded-xl text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
+                          className="w-full text-left px-3 py-1.5 rounded-xl text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
                         >
                           <Plus className="w-3.5 h-3.5 text-purple-400" />
                           {lang === 'bn' ? 'পরের গানে যোগ করুন' : 'Add to Queue'}
                         </button>
+
+                        {onOpenCutter && (
+                          <button
+                            onClick={() => {
+                              onOpenCutter(track);
+                              setActiveMenuTrackId(null);
+                            }}
+                            className="w-full text-left px-3 py-1.5 rounded-xl text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
+                          >
+                            <Scissors className="w-3.5 h-3.5 text-purple-400" />
+                            {lang === 'bn' ? 'রিংটোন কাটার' : 'Trim & Ringtone'}
+                          </button>
+                        )}
+
+                        {onOpenTagEditor && (
+                          <button
+                            onClick={() => {
+                              onOpenTagEditor(track);
+                              setActiveMenuTrackId(null);
+                            }}
+                            className="w-full text-left px-3 py-1.5 rounded-xl text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
+                          >
+                            <Tag className="w-3.5 h-3.5 text-pink-400" />
+                            {lang === 'bn' ? 'ট্যাগ ও কভার এডিট' : 'Edit Tags & Cover'}
+                          </button>
+                        )}
+
+                        {onOpenBookmarks && (
+                          <button
+                            onClick={() => {
+                              onOpenBookmarks(track);
+                              setActiveMenuTrackId(null);
+                            }}
+                            className="w-full text-left px-3 py-1.5 rounded-xl text-xs text-slate-200 hover:bg-white/10 flex items-center gap-2 transition"
+                          >
+                            <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+                            {lang === 'bn' ? 'বুকমার্ক করুন' : 'Add Bookmark'}
+                          </button>
+                        )}
                         {playlists.length > 0 && (
                           <div className="pt-1 border-t border-white/10">
                             <div className="px-3 py-1 text-[10px] text-slate-400 font-semibold uppercase">

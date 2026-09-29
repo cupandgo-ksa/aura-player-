@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Moon, Plus, Globe, ShieldCheck } from 'lucide-react';
+import { Sparkles, Moon, Plus, Globe, ShieldCheck, Download, Wrench } from 'lucide-react';
 
 interface GlassHeaderProps {
   lang: 'bn' | 'en';
@@ -7,6 +7,8 @@ interface GlassHeaderProps {
   onOpenSleepTimer: () => void;
   sleepTimerRemaining: number;
   onOpenImport: () => void;
+  onOpenDownloadGuide: () => void;
+  onOpenStudioTools: () => void;
 }
 
 export const GlassHeader: React.FC<GlassHeaderProps> = ({
@@ -15,6 +17,8 @@ export const GlassHeader: React.FC<GlassHeaderProps> = ({
   onOpenSleepTimer,
   sleepTimerRemaining,
   onOpenImport,
+  onOpenDownloadGuide,
+  onOpenStudioTools,
 }) => {
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -50,6 +54,33 @@ export const GlassHeader: React.FC<GlassHeaderProps> = ({
 
         {/* Action icons */}
         <div className="flex items-center gap-2">
+          {/* Studio Tools Button */}
+          <button
+            onClick={onOpenStudioTools}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/25 to-purple-600/25 hover:from-amber-500/35 hover:to-purple-600/35 border border-amber-400/40 text-amber-200 text-xs font-bold shadow-md transition active:scale-95"
+            title={lang === 'bn' ? 'প্রিমিয়াম স্টুডিও টুলস (রিংটোন কাটার, কনভার্টার, কার মোড)' : 'Premium Studio Tools'}
+          >
+            <Wrench className="w-4 h-4 text-amber-300" />
+            <span className="hidden sm:inline">
+              {lang === 'bn' ? 'টুলস' : 'Tools'}
+            </span>
+            <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/30 text-amber-200 font-mono">
+              7+
+            </span>
+          </button>
+
+          {/* Download / Install App Button */}
+          <button
+            onClick={onOpenDownloadGuide}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600/30 to-cyan-500/30 hover:from-purple-600/50 hover:to-cyan-500/50 border border-cyan-400/40 text-cyan-200 text-xs font-bold shadow-md transition active:scale-95"
+            title={lang === 'bn' ? 'অ্যাপ ডাউনলোড ও ইনস্টল করুন' : 'Download / Install App'}
+          >
+            <Download className="w-4 h-4 text-cyan-300" />
+            <span className="hidden sm:inline">
+              {lang === 'bn' ? 'ডাউনলোড' : 'Install'}
+            </span>
+          </button>
+
           {/* Add file / import button */}
           <button
             onClick={onOpenImport}

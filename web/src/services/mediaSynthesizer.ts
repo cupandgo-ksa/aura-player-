@@ -261,7 +261,7 @@ export async function createOfflineSampleVideo(
 
       ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
       ctx.font = '13px Plus Jakarta Sans, sans-serif';
-      ctx.fillText('Aura Glass 1080p Video • Offline Playback', 320, 96);
+      ctx.fillText('A S Media Player', 320, 96);
 
       if (frame >= totalFrames) {
         clearInterval(interval);

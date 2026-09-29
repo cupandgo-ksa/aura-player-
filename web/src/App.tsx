@@ -29,6 +29,13 @@ import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SleepTimerModal } from './components/SleepTimerModal';
 import { CreatePlaylistModal } from './components/CreatePlaylistModal';
 import { ImportMediaModal } from './components/ImportMediaModal';
+import { DownloadGuideModal } from './components/DownloadGuideModal';
+import { StudioToolsModal } from './components/StudioToolsModal';
+import { AudioCutterModal } from './components/AudioCutterModal';
+import { VideoToAudioModal } from './components/VideoToAudioModal';
+import { TagEditorModal } from './components/TagEditorModal';
+import { CarModeModal } from './components/CarModeModal';
+import { BookmarksModal } from './components/BookmarksModal';
 
 export const App: React.FC = () => {
   const audioEngine = AudioEngine.getInstance();
@@ -58,6 +65,17 @@ export const App: React.FC = () => {
   const [isSleepTimerOpen, setIsSleepTimerOpen] = useState(false);
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [isImportMediaOpen, setIsImportMediaOpen] = useState(false);
+  const [isDownloadGuideOpen, setIsDownloadGuideOpen] = useState(false);
+
+  // Premium Studio Tools Modals
+  const [isStudioToolsOpen, setIsStudioToolsOpen] = useState(false);
+  const [isAudioCutterOpen, setIsAudioCutterOpen] = useState(false);
+  const [activeCutterTrack, setActiveCutterTrack] = useState<Track | null>(null);
+  const [isVideoExtractorOpen, setIsVideoExtractorOpen] = useState(false);
+  const [isTagEditorOpen, setIsTagEditorOpen] = useState(false);
+  const [activeTagTrack, setActiveTagTrack] = useState<Track | null>(null);
+  const [isCarModeOpen, setIsCarModeOpen] = useState(false);
+  const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
 
   // Sleep Timer
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number>(0);
@@ -83,18 +101,16 @@ export const App: React.FC = () => {
       // 2. Load stored tracks or seed initial tracks
       const storedTracks = await getAllTracks();
       if (window.AuraNative) {
-        const found = phoneMedia().map((item) => ({
-          ...item, isFavorite: storedTracks.find((old) => old.id === item.id)?.isFavorite || false,
-        }));
-        await saveMultipleTracks(found);
+        const found = phoneMedia().map((item) => ({ ...item,
+          isFavorite: storedTracks.find((old) => old.id === item.id)?.isFavorite || false }));
         setTracks(found);
         setQueue(found.filter((t) => t.type === 'audio'));
-        if (found.length > 0) {
-          setCurrentTrack(found.find((t) => t.type === 'audio') || found[0]);
-          audioEngine.setTrack(found.find((t) => t.type === 'audio') || found[0], false);
-        }
+        const first = found.find((t) => t.type === 'audio');
+        if (first) { setCurrentTrack(first); audioEngine.setTrack(first, false); }
       } else if (storedTracks.length === 0) {
-        const combined = [...getInitialTracks(), ...getInitialVideos()];
+        const initialAudio = getInitialTracks();
+        const initialVideo = getInitialVideos();
+        const combined = [...initialAudio, ...initialVideo];
         await saveMultipleTracks(combined);
         setTracks(combined);
         setQueue(combined.filter((t) => t.type === 'audio'));
@@ -137,7 +153,6 @@ export const App: React.FC = () => {
       setTracks((previous) => {
         const updated = found.map((item) => ({ ...item,
           isFavorite: previous.find((old) => old.id === item.id)?.isFavorite || false }));
-        void saveMultipleTracks(updated);
         setQueue(updated.filter((t) => t.type === 'audio'));
         return updated;
       });
@@ -149,8 +164,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!window.AuraNative) return;
     const changed = (event: Event) => {
-      const uri = (event as CustomEvent<string>).detail;
-      const track = tracks.find((item) => item.url === uri);
+      const track = tracks.find((item) => item.url === (event as CustomEvent<string>).detail);
       if (track) { setCurrentTrack(track); audioEngine.setTrack(track, false); }
     };
     window.addEventListener('auraNativeTrack', changed);
@@ -429,6 +443,30 @@ export const App: React.FC = () => {
     saveSetting('lang', nextLang);
   };
 
+  // Studio Tools Handlers
+  const handleSaveTrimmedTrack = async (newTrack: Track) => {
+    await saveTrack(newTrack);
+    setTracks((prev) => [newTrack, ...prev]);
+    setQueue((prev) => [newTrack, ...prev]);
+  };
+
+  const handleAddExtractedTrack = async (newTrack: Track) => {
+    await saveTrack(newTrack);
+    setTracks((prev) => [newTrack, ...prev]);
+    setQueue((prev) => [newTrack, ...prev]);
+    handlePlayTrack(newTrack);
+    setCurrentTab('music');
+  };
+
+  const handleUpdateTrackTags = async (updatedTrack: Track) => {
+    await saveTrack(updatedTrack);
+    setTracks((prev) => prev.map((t) => (t.id === updatedTrack.id ? updatedTrack : t)));
+    setQueue((prev) => prev.map((t) => (t.id === updatedTrack.id ? updatedTrack : t)));
+    if (currentTrack?.id === updatedTrack.id) {
+      setCurrentTrack(updatedTrack);
+    }
+  };
+
   return (
     <div className="relative min-h-screen text-slate-100 flex flex-col justify-between selection:bg-purple-500/30 overflow-x-hidden">
       {/* Background Soft Glass Glow and Aurora Orbs */}
@@ -441,6 +479,7 @@ export const App: React.FC = () => {
         onOpenSleepTimer={() => setIsSleepTimerOpen(true)}
         sleepTimerRemaining={sleepTimerRemaining}
         onOpenImport={openImport}
+        onOpenStudioTools={() => setIsStudioToolsOpen(true)}
       />
 
       {/* Main Tab Content based on cleanly separated selection */}
@@ -457,6 +496,17 @@ export const App: React.FC = () => {
             onOpenImport={openImport}
             playlists={playlists}
             onAddTrackToPlaylist={handleAddTrackToPlaylist}
+            onOpenCutter={(t) => {
+              setActiveCutterTrack(t);
+              setIsAudioCutterOpen(true);
+            }}
+            onOpenTagEditor={(t) => {
+              setActiveTagTrack(t);
+              setIsTagEditorOpen(true);
+            }}
+            onOpenBookmarks={() => {
+              setIsBookmarksOpen(true);
+            }}
             lang={lang}
           />
         )}
@@ -583,6 +633,87 @@ export const App: React.FC = () => {
         isOpen={isImportMediaOpen}
         onClose={() => setIsImportMediaOpen(false)}
         onImportTracks={handleImportTracks}
+        lang={lang}
+      />
+
+      {/* Download & Install Guide Modal */}
+      <DownloadGuideModal
+        isOpen={isDownloadGuideOpen}
+        onClose={() => setIsDownloadGuideOpen(false)}
+        lang={lang}
+      />
+
+      {/* Premium Studio Tools Hub Modal */}
+      <StudioToolsModal
+        isOpen={isStudioToolsOpen}
+        onClose={() => setIsStudioToolsOpen(false)}
+        onOpenAudioCutter={() => {
+          setActiveCutterTrack(currentTrack || tracks[0]);
+          setIsAudioCutterOpen(true);
+        }}
+        onOpenVideoExtractor={() => setIsVideoExtractorOpen(true)}
+        onOpenTagEditor={() => {
+          setActiveTagTrack(currentTrack || tracks[0]);
+          setIsTagEditorOpen(true);
+        }}
+        onOpenCarMode={() => setIsCarModeOpen(true)}
+        onOpenEqualizer={() => setCurrentTab('equalizer')}
+        onOpenBookmarks={() => setIsBookmarksOpen(true)}
+        lang={lang}
+      />
+
+      {/* Audio Cutter & Ringtone Maker Modal */}
+      <AudioCutterModal
+        isOpen={isAudioCutterOpen}
+        onClose={() => setIsAudioCutterOpen(false)}
+        tracks={tracks.filter((t) => t.type === 'audio')}
+        initialTrack={activeCutterTrack || currentTrack}
+        onSaveTrimmedTrack={handleSaveTrimmedTrack}
+        lang={lang}
+      />
+
+      {/* Video to MP3 Extractor Modal */}
+      <VideoToAudioModal
+        isOpen={isVideoExtractorOpen}
+        onClose={() => setIsVideoExtractorOpen(false)}
+        videoTracks={tracks.filter((t) => t.type === 'video')}
+        onAddExtractedTrack={handleAddExtractedTrack}
+        lang={lang}
+      />
+
+      {/* ID3 Tag & Cover Art Editor Modal */}
+      <TagEditorModal
+        isOpen={isTagEditorOpen}
+        onClose={() => setIsTagEditorOpen(false)}
+        track={activeTagTrack || currentTrack}
+        onSaveTrack={handleUpdateTrackTags}
+        lang={lang}
+      />
+
+      {/* Car Driving Mode Modal */}
+      <CarModeModal
+        isOpen={isCarModeOpen}
+        onClose={() => setIsCarModeOpen(false)}
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        onTogglePlay={handleTogglePlay}
+        onPreviousTrack={handlePreviousTrack}
+        onNextTrack={handleNextTrack}
+        onToggleFavorite={handleToggleFavorite}
+        volume={volume}
+        onSetVolume={handleSetVolume}
+        isShuffle={isShuffle}
+        onToggleShuffle={handleToggleShuffle}
+        lang={lang}
+      />
+
+      {/* Smart Bookmarks & Audiobook Resume Modal */}
+      <BookmarksModal
+        isOpen={isBookmarksOpen}
+        onClose={() => setIsBookmarksOpen(false)}
+        currentTrack={currentTrack}
+        currentTime={currentTime}
+        onSeek={handleSeek}
         lang={lang}
       />
     </div>

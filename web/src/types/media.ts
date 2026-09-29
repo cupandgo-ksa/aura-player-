@@ -29,19 +29,6 @@ export interface Playlist {
   isSystem?: boolean;
 }
 
-export interface TVChannel {
-  id: string;
-  name: string;
-  bnName: string;
-  category: 'music' | 'nature' | 'entertainment' | 'news';
-  streamUrl: string;
-  logoUrl: string;
-  description: string;
-  bnDescription: string;
-  resolution: string;
-  isLive: boolean;
-}
-
 export interface EqualizerPreset {
   id: string;
   name: string;
@@ -51,7 +38,7 @@ export interface EqualizerPreset {
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
-export type MainTab = 'music' | 'video' | 'tv' | 'playlists' | 'folders' | 'equalizer';
+export type MainTab = 'music' | 'video' | 'playlists' | 'folders' | 'equalizer';
 
 export interface SleepTimerState {
   isActive: boolean;

@@ -17,8 +17,15 @@ import {
   Clock,
   Sparkles,
   Gauge,
+  Activity,
+  User,
+  Disc3,
+  Tag,
+  Radio,
+  HardDrive,
 } from 'lucide-react';
 import { Track, RepeatMode } from '../types/media';
+import { NowPlayingVisualizer } from './NowPlayingVisualizer';
 
 interface NowPlayingModalProps {
   isOpen: boolean;
@@ -75,7 +82,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
   onOpenSleepTimer,
   lang,
 }) => {
-  const [activeTab, setActiveTab] = useState<'art' | 'lyrics' | 'queue'>('art');
+  const [activeTab, setActiveTab] = useState<'art' | 'visualizer' | 'lyrics' | 'queue'>('art');
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
 
   if (!isOpen || !currentTrack) return null;
@@ -138,23 +145,34 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
           </div>
         </div>
 
-        {/* View Switcher: Cover Art / Lyrics / Queue */}
-        <div className="flex items-center justify-center gap-2 py-1">
+        {/* View Switcher: Cover Art / Visualizer / Lyrics / Queue */}
+        <div className="flex items-center justify-center gap-1.5 py-1 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('art')}
-            className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
+            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition ${
               activeTab === 'art'
-                ? 'bg-purple-500/30 text-purple-200 border border-purple-400/40'
+                ? 'bg-purple-500/30 text-purple-200 border border-purple-400/40 shadow-sm'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             {lang === 'bn' ? 'অ্যালবাম আর্ট' : 'Album Art'}
           </button>
           <button
+            onClick={() => setActiveTab('visualizer')}
+            className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition ${
+              activeTab === 'visualizer'
+                ? 'bg-purple-500/30 text-purple-200 border border-purple-400/40 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Activity className="w-3 h-3 text-purple-400 animate-pulse" />
+            <span>{lang === 'bn' ? 'ভিজ্যুয়ালাইজার' : 'Visualizer'}</span>
+          </button>
+          <button
             onClick={() => setActiveTab('lyrics')}
-            className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
+            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition ${
               activeTab === 'lyrics'
-                ? 'bg-purple-500/30 text-purple-200 border border-purple-400/40'
+                ? 'bg-purple-500/30 text-purple-200 border border-purple-400/40 shadow-sm'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -162,9 +180,9 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('queue')}
-            className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
+            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition ${
               activeTab === 'queue'
-                ? 'bg-purple-500/30 text-purple-200 border border-purple-400/40'
+                ? 'bg-purple-500/30 text-purple-200 border border-purple-400/40 shadow-sm'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -173,7 +191,7 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
         </div>
 
         {/* Center Main Stage */}
-        <div className="my-auto py-4 flex items-center justify-center min-h-[260px]">
+        <div className="my-auto py-3 flex items-center justify-center min-h-[260px]">
           {activeTab === 'art' && (
             <div className="relative group flex items-center justify-center">
               {/* Outer soft glass glow halo */}
@@ -204,6 +222,17 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
                   <div className="w-2.5 h-2.5 rounded-full bg-purple-400" />
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'visualizer' && (
+            <div className="w-full">
+              <NowPlayingVisualizer
+                isPlaying={isPlaying}
+                coverUrl={currentTrack.coverUrl}
+                title={currentTrack.title}
+                lang={lang}
+              />
             </div>
           )}
 
@@ -258,28 +287,85 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
           )}
         </div>
 
-        {/* Title, Artist & Favorite */}
-        <div className="flex items-center justify-between gap-3 pt-2">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg sm:text-xl font-bold text-white truncate">
-              {currentTrack.title}
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-300 truncate mt-0.5">
-              {currentTrack.artist} • {currentTrack.genre || 'Offline Audio'}
-            </p>
+        {/* Soft-Glass Track Metadata Section */}
+        <div className="w-full glass-card rounded-3xl p-3.5 sm:p-4 border border-white/15 bg-gradient-to-br from-white/10 via-slate-900/40 to-purple-900/20 backdrop-blur-2xl shadow-xl space-y-2.5">
+          {/* Top Row: Mini Album Art Thumbnail + Title + Artist + Favorite */}
+          <div className="flex items-center gap-3">
+            {/* Soft-Glass Album Art Thumbnail with glossy border */}
+            <div className="relative w-13 h-13 sm:w-14 sm:h-14 rounded-2xl overflow-hidden p-[2px] bg-gradient-to-tr from-purple-500/50 via-cyan-400/40 to-pink-500/30 flex-shrink-0 shadow-lg shadow-purple-950/40">
+              <img
+                src={currentTrack.coverUrl}
+                alt={currentTrack.album || currentTrack.title}
+                className="w-full h-full object-cover rounded-[14px]"
+              />
+              {isPlaying && (
+                <div className="absolute inset-0 bg-black/35 backdrop-blur-[1px] flex items-center justify-center">
+                  <div className="flex items-end gap-0.5 h-3">
+                    <span className="w-1 bg-cyan-300 rounded-full animate-pulse h-2" />
+                    <span className="w-1 bg-purple-300 rounded-full animate-pulse h-3" />
+                    <span className="w-1 bg-pink-300 rounded-full animate-pulse h-1.5" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Title & Artist */}
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base sm:text-lg font-bold text-white truncate tracking-tight">
+                {currentTrack.title}
+              </h3>
+              <div className="flex items-center gap-1.5 text-xs text-purple-200/90 font-medium truncate mt-0.5">
+                <User className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                <span className="truncate">{currentTrack.artist}</span>
+              </div>
+            </div>
+
+            {/* Favorite Button */}
+            <button
+              onClick={() => onToggleFavorite(currentTrack.id)}
+              className={`p-2.5 rounded-2xl border transition active:scale-90 flex-shrink-0 ${
+                currentTrack.isFavorite
+                  ? 'bg-rose-500/25 border-rose-500/40 text-rose-400 shadow-lg shadow-rose-500/20'
+                  : 'glass-card border-white/10 text-slate-400 hover:text-rose-400'
+              }`}
+              title={currentTrack.isFavorite ? 'Remove Favorite' : 'Add to Favorites'}
+            >
+              <Heart
+                className={`w-5 h-5 ${
+                  currentTrack.isFavorite ? 'fill-rose-500 text-rose-500' : ''
+                }`}
+              />
+            </button>
           </div>
 
-          <button
-            onClick={() => onToggleFavorite(currentTrack.id)}
-            className="p-2.5 rounded-2xl glass-card text-slate-300 hover:text-red-400 transition active:scale-90"
-            title="Favorite"
-          >
-            <Heart
-              className={`w-5 h-5 ${
-                currentTrack.isFavorite ? 'fill-red-500 text-red-500' : ''
-              }`}
-            />
-          </button>
+          {/* Metadata Badges: Genre, Album, Format, Offline Indicator */}
+          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+            {/* Genre Badge */}
+            {currentTrack.genre && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-semibold bg-purple-500/20 border border-purple-400/30 text-purple-200">
+                <Tag className="w-3 h-3 text-purple-400" />
+                <span>{currentTrack.genre}</span>
+              </span>
+            )}
+
+            {/* Album Badge */}
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl text-[11px] font-medium bg-white/5 border border-white/10 text-slate-300 max-w-[150px] sm:max-w-none truncate">
+              <Disc3 className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+              <span className="truncate">{currentTrack.album || 'Single Album'}</span>
+            </span>
+
+            {/* Audio Quality / Format */}
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl text-[10px] font-mono font-semibold bg-cyan-500/15 border border-cyan-400/25 text-cyan-300">
+              <Radio className="w-3 h-3 text-cyan-400" />
+              <span>{currentTrack.format?.toUpperCase() || 'MP3'} • 320kbps</span>
+            </span>
+
+            {/* Offline Storage Status */}
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl text-[10px] font-medium bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 ml-auto">
+              <HardDrive className="w-3 h-3 text-emerald-400" />
+              <span>{lang === 'bn' ? 'অফলাইন মিডিয়া' : 'Offline Media'}</span>
+            </span>
+          </div>
         </div>
 
         {/* Progress Bar & Timers */}

@@ -41,14 +41,14 @@ export const GlassNavbar: React.FC<GlassNavbarProps> = ({
     {
       id: 'equalizer' as MainTab,
       labelBn: 'ইকুয়ালাইজার',
-      labelEn: 'EQ',
+      labelEn: 'Equalizer',
       icon: Sliders,
     },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 px-2 pb-safe pt-1 glass-panel border-x-0 border-b-0 border-t border-white/10 backdrop-blur-2xl">
-      <div className="max-w-lg mx-auto flex items-center justify-around py-1">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-safe pt-1 glass-panel border-x-0 border-b-0 border-t border-white/10 backdrop-blur-2xl">
+      <div className="max-w-md mx-auto flex items-center justify-around py-1.5">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = currentTab === tab.id;
@@ -56,7 +56,7 @@ export const GlassNavbar: React.FC<GlassNavbarProps> = ({
             <button
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
-              className={`relative flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all duration-200 active:scale-95 ${
+              className={`relative flex flex-col items-center justify-center py-1.5 px-3 rounded-2xl transition-all duration-200 active:scale-95 ${
                 isActive
                   ? 'text-white'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -71,7 +71,7 @@ export const GlassNavbar: React.FC<GlassNavbarProps> = ({
                 }`}
               />
               <span
-                className={`text-[10px] font-medium mt-0.5 tracking-tight transition-colors ${
+                className={`text-[11px] font-medium mt-1 tracking-tight transition-colors ${
                   isActive ? 'text-purple-200 font-semibold' : ''
                 }`}
               >

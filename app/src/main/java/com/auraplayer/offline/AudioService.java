@@ -59,7 +59,7 @@ public class AudioService extends Service {
         NotificationManager notifications = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26)
             notifications.createNotificationChannel(new NotificationChannel(CHANNEL, "Music playback", NotificationManager.IMPORTANCE_LOW));
-        session = new MediaSession(this, "AURA Player");
+        session = new MediaSession(this, "A S Media Player");
         session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
         session.setCallback(new MediaSession.Callback() {
             @Override public void onPlay() { resume(); }
@@ -83,7 +83,7 @@ public class AudioService extends Service {
             String target = intent.getStringExtra("uri");
             if (target == null) { stopSelf(); return START_NOT_STICKY; }
             title = intent.getStringExtra("title"); artist = intent.getStringExtra("artist"); uri = target;
-            if (title == null) title = "AURA Player";
+            if (title == null) title = "A S Media Player";
             if (artist == null) artist = "Offline music";
             queueIndex = -1;
             for (int n = 0; n < queue.size(); n++) if (queue.get(n).uri.equals(uri)) { queueIndex = n; break; }

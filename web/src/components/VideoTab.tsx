@@ -22,6 +22,8 @@ interface VideoTabProps {
   lang: 'bn' | 'en';
 }
 
+export type VideoSearchScope = 'all' | 'title' | 'artist' | 'album';
+
 export const VideoTab: React.FC<VideoTabProps> = ({
   tracks,
   onPlayVideo,
@@ -31,20 +33,28 @@ export const VideoTab: React.FC<VideoTabProps> = ({
   lang,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchScope, setSearchScope] = useState<VideoSearchScope>('all');
 
   const videoTracks = useMemo(() => {
     return tracks.filter((t) => t.type === 'video');
   }, [tracks]);
 
   const filteredVideos = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return videoTracks;
+
     return videoTracks.filter((t) => {
-      return (
-        t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (t.genre && t.genre.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
+      const matchTitle = t.title.toLowerCase().includes(q);
+      const matchArtist = t.artist.toLowerCase().includes(q);
+      const matchAlbum = Boolean(t.album && t.album.toLowerCase().includes(q));
+      const matchGenre = Boolean(t.genre && t.genre.toLowerCase().includes(q));
+
+      if (searchScope === 'title') return matchTitle;
+      if (searchScope === 'artist') return matchArtist;
+      if (searchScope === 'album') return matchAlbum;
+      return matchTitle || matchArtist || matchAlbum || matchGenre;
     });
-  }, [videoTracks, searchQuery]);
+  }, [videoTracks, searchQuery, searchScope]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -59,7 +69,87 @@ export const VideoTab: React.FC<VideoTabProps> = ({
 
   return (
     <div className="pb-36 pt-2 px-4 max-w-4xl mx-auto space-y-4">
-      {/* Top Banner: Video Background Playback highlight */}
+      {/* Top Search & Filter Bar */}
+      <div className="glass-card rounded-3xl p-3 sm:p-4 border border-cyan-500/20 bg-slate-900/60 shadow-xl space-y-2.5 backdrop-blur-2xl">
+        <div className="flex flex-col sm:flex-row gap-2.5">
+          {/* Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={
+                searchScope === 'title'
+                  ? lang === 'bn' ? 'ভিডিও নাম দিয়ে খুঁজুন...' : 'Search by video title...'
+                  : searchScope === 'artist'
+                  ? lang === 'bn' ? 'নির্মাতা/শিল্পীর নাম দিয়ে খুঁজুন...' : 'Search by artist or creator...'
+                  : searchScope === 'album'
+                  ? lang === 'bn' ? 'অ্যালবাম/সংকলন দিয়ে খুঁজুন...' : 'Search by collection/album...'
+                  : lang === 'bn' ? 'ভিডিও নাম, শিল্পী বা অ্যালবাম খুঁজুন...' : 'Search title, artist, or album...'
+              }
+              className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white/5 border border-white/10 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-cyan-400/50 transition backdrop-blur-xl"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-xs text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 transition"
+                title="Clear"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={onOpenImport}
+            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-cyan-600/30 hover:bg-cyan-600/40 border border-cyan-400/30 text-xs font-semibold text-cyan-200 transition active:scale-95 whitespace-nowrap justify-center"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{lang === 'bn' ? 'ভিডিও যোগ করুন' : 'Import Video'}</span>
+          </button>
+        </div>
+
+        {/* Search Scope Filter Chips (All, Title, Artist, Album) */}
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            <span className="text-[11px] text-slate-400 font-medium mr-1 hidden sm:inline">
+              {lang === 'bn' ? 'ফিল্টার:' : 'Filter:'}
+            </span>
+            {(
+              [
+                { id: 'all', labelBn: 'সবগুলো', labelEn: 'All' },
+                { id: 'title', labelBn: 'ভিডিও নাম', labelEn: 'Title' },
+                { id: 'artist', labelBn: 'শিল্পী / চ্যানেল', labelEn: 'Artist' },
+                { id: 'album', labelBn: 'অ্যালবাম', labelEn: 'Album' },
+              ] as const
+            ).map((scope) => {
+              const isActive = searchScope === scope.id;
+              return (
+                <button
+                  key={scope.id}
+                  onClick={() => setSearchScope(scope.id)}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-medium transition active:scale-95 whitespace-nowrap ${
+                    isActive
+                      ? 'bg-cyan-600 text-white shadow-md border border-cyan-400/40'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5'
+                  }`}
+                >
+                  {lang === 'bn' ? scope.labelBn : scope.labelEn}
+                </button>
+              );
+            })}
+          </div>
+
+          {searchQuery && (
+            <div className="text-[11px] font-mono text-cyan-300 whitespace-nowrap">
+              {filteredVideos.length} {lang === 'bn' ? 'টি ভিডিও' : 'found'}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Video Background Playback highlight */}
       <div className="glass-card rounded-3xl p-4 sm:p-5 border border-cyan-500/20 bg-gradient-to-r from-cyan-950/40 via-purple-950/30 to-indigo-950/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 flex-shrink-0">
@@ -81,28 +171,6 @@ export const VideoTab: React.FC<VideoTabProps> = ({
             </p>
           </div>
         </div>
-
-        <button
-          onClick={onOpenImport}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-600/30 hover:bg-cyan-600/40 border border-cyan-400/30 text-xs font-semibold text-cyan-200 transition active:scale-95 whitespace-nowrap self-stretch sm:self-auto justify-center"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{lang === 'bn' ? 'ভিডিও যোগ করুন' : 'Import Video'}</span>
-        </button>
-      </div>
-
-      {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={
-            lang === 'bn' ? 'ভিডিও খুঁজুন (নাম বা ধরন)...' : 'Search video files...'
-          }
-          className="w-full pl-10 pr-4 py-2.5 rounded-2xl glass-card border border-white/10 text-white placeholder-slate-400 text-sm focus:outline-none focus:border-cyan-400/50 transition backdrop-blur-xl"
-        />
       </div>
 
       {/* Videos Count */}
