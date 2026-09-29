@@ -1,12 +1,12 @@
-# AURA Player — personal offline Android player
+# A S media-player — personal offline Android player
 
-An ad-free, local audio/video player. No account, analytics SDK, ad SDK, or `INTERNET` permission. Selected file references and playback positions are stored only on the device. Choose files saved on the device in the system picker; a cloud provider may require its own connection.
+A private local audio/video player. No account, analytics SDK, advertising SDK, or `INTERNET` permission. Selected file references and playback positions are stored only on the device. Choose files saved on the device in the system picker; a cloud provider may require its own connection.
 
 ## Build
 
 **Phone only:** See `ফোনে-APK-বানানোর-নির্দেশনা.md` for the Code on the Go steps.
 
-**GitHub cloud build:** The included `.github/workflows/build-apk.yml` can compile an installable debug APK in a separate private repository using GitHub Actions. Place the *contents* of this folder at the repository root. On a successful workflow run, download the `AURA-Player-APK` artifact. Do not add this personal app to an unrelated public repository.
+**GitHub cloud build:** The included `.github/workflows/build-apk.yml` can compile an installable debug APK in a separate private repository using GitHub Actions. Place the *contents* of this folder at the repository root. On a successful workflow run, download the `A-S-media-player-APK` artifact. Do not add this personal app to an unrelated public repository.
 
 The private repository includes a stable *debug-only* keystore so future test APKs install over this version. Keep the repository private. Users of the very first APK (built before this key was added) need to uninstall that first version once before installing this one; uninstalling clears its app data and imported-file list.
 
