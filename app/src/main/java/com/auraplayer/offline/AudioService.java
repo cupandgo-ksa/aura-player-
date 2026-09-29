@@ -18,6 +18,7 @@ import android.media.session.MediaSession;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -121,6 +122,7 @@ public class AudioService extends Service {
             next.setOnPreparedListener(mp -> {
                 if (mp != player) return;
                 ready = true;
+                Log.i("AURA_AUDIO", "Prepared " + title);
                 mp.setVolume(volume, volume);
                 attachEqualizer();
                 if (position > 0) mp.seekTo(position);
@@ -128,11 +130,11 @@ public class AudioService extends Service {
             });
             next.setOnCompletionListener(mp -> { if (mp == player) { if ("one".equals(repeatMode)) { seek(0); resume(); } else nextAfterCompletion(); } });
             next.setOnErrorListener((mp, what, extra) -> {
-                if (mp == player) { releasePlayer(); updateNotification(); }
+                if (mp == player) { Log.e("AURA_AUDIO", "Playback error " + what + "/" + extra); releasePlayer(); updateNotification(); }
                 return true;
             });
             next.prepareAsync();
-        } catch (Exception ex) { releasePlayer(); updateNotification(); }
+        } catch (Exception ex) { Log.e("AURA_AUDIO", "Could not play " + target, ex); releasePlayer(); updateNotification(); }
     }
 
     private final AudioManager.OnAudioFocusChangeListener focus = change -> {

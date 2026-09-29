@@ -57,6 +57,22 @@ jobs:
           script: |
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.auraplayer.offline android.permission.READ_MEDIA_AUDIO
+            python3 - <<'PY'
+            import math, wave, struct
+            with wave.open('aura-smoke.wav','wb') as f:
+                f.setnchannels(1); f.setsampwidth(2); f.setframerate(22050)
+                f.writeframes(b''.join(struct.pack('<h',int(3000*math.sin(2*math.pi*440*i/22050))) for i in range(22050*8)))
+            PY
+            adb shell mkdir -p /sdcard/Music
+            adb push aura-smoke.wav /sdcard/Music/aura-smoke.wav
+            adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Music/aura-smoke.wav
+            sleep 3
+            item_id=$(adb shell content query --uri content://media/external/audio/media --projection _id:_display_name --where "_display_name='aura-smoke.wav'" | sed -n 's/.*_id=\\([0-9][0-9]*\\).*/\\1/p' | head -n 1)
+            test -n "$item_id"
+            adb shell am start-foreground-service -n com.auraplayer.offline/.AudioService -a com.auraplayer.offline.PLAY --es uri "content://media/external/audio/media/$item_id" --es title "Aura smoke" --es artist "Local audio"
+            sleep 2
+            adb logcat -d -s AURA_AUDIO:I AndroidRuntime:E > audio-smoke.log
+            if ! grep -q 'Prepared Aura smoke' audio-smoke.log || grep -qE 'FATAL EXCEPTION|Playback error|Could not play' audio-smoke.log; then cat audio-smoke.log; exit 1; fi
             adb shell am start -n com.auraplayer.offline/.GlassActivity
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
@@ -72,4 +88,5 @@ jobs:
           path: |
             glass-smoke.png
             glass-smoke.log
+            audio-smoke.log
           if-no-files-found: ignore
