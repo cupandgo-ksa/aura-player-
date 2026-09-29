@@ -11,8 +11,13 @@ import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
 import android.graphics.Typeface;
+import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
 import android.media.MediaMetadataRetriever;
@@ -119,12 +124,36 @@ public class PremiumActivity extends Activity {
 
     private static class Entry {
         String uri, name, folder, artist = "Unknown artist", album = "";
+        long albumId;
         boolean video, imported;
         long duration;
         Entry(String uri, String name, String folder, boolean video, long duration, boolean imported) {
             this.uri = uri; this.name = name; this.folder = folder; this.video = video;
             this.duration = duration; this.imported = imported;
         }
+    }
+    private static class CoverDrawable extends Drawable {
+        private final String letter;
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final int tone;
+        CoverDrawable(String title, int seed) {
+            String clean = title == null ? "" : title.trim();
+            letter = clean.isEmpty() ? "A" : clean.substring(0, 1).toUpperCase(Locale.ROOT);
+            int[] tones = {0xFF333D47, 0xFF473640, 0xFF313D3A, 0xFF3F3A48, 0xFF454039};
+            tone = tones[Math.floorMod(seed, tones.length)];
+        }
+        @Override public void draw(Canvas canvas) {
+            Rect b = getBounds();
+            paint.setShader(new android.graphics.LinearGradient(b.left, b.top, b.right, b.bottom,
+                tone, 0xFF121416, android.graphics.Shader.TileMode.CLAMP));
+            canvas.drawRect(b, paint); paint.setShader(null);
+            paint.setColor(0xD9FFFFFF); paint.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+            paint.setTextSize(Math.min(b.width(), b.height()) * .37f); paint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText(letter, b.centerX(), b.centerY() - (paint.ascent() + paint.descent()) / 2, paint);
+        }
+        @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); invalidateSelf(); }
+        @Override public void setColorFilter(android.graphics.ColorFilter filter) { paint.setColorFilter(filter); invalidateSelf(); }
+        @Override public int getOpacity() { return PixelFormat.OPAQUE; }
     }
     private static class Caption {
         int start, end; String text;
@@ -359,6 +388,7 @@ public class PremiumActivity extends Activity {
     private void loadArt(ImageView view, Entry entry) {
         String uri = entry.uri;
         view.setTag(uri);
+        if (view != ambientArt) view.setImageDrawable(new CoverDrawable(entry.name, uri.hashCode()));
         Bitmap cached;
         synchronized (thumbCache) { cached = thumbCache.get(uri); }
         if (cached != null) { view.setImageBitmap(cached); return; }
@@ -379,6 +409,12 @@ public class PremiumActivity extends Activity {
                             BitmapFactory.Options options = new BitmapFactory.Options(); options.inSampleSize = 1;
                             while (Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 650) options.inSampleSize *= 2;
                             bmp = BitmapFactory.decodeByteArray(art, 0, art.length, options);
+                        }
+                        if (bmp == null && entry.albumId > 0 && Build.VERSION.SDK_INT >= 29) {
+                            try {
+                                Uri albumArt = Uri.parse("content://media/external/audio/albumart/" + entry.albumId);
+                                bmp = getContentResolver().loadThumbnail(albumArt, new Size(600, 600), null);
+                            } catch (Exception ignored) { }
                         }
                         String title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
                         String artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
@@ -472,7 +508,8 @@ public class PremiumActivity extends Activity {
             : new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
                 MediaStore.MediaColumns.DURATION, Build.VERSION.SDK_INT >= 29
                     ? MediaStore.MediaColumns.RELATIVE_PATH : MediaStore.MediaColumns.DATA,
-                MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM};
+                MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.ALBUM_ID};
         try (Cursor c = getContentResolver().query(collection, cols, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
             if (c == null) return;
             while (c.moveToNext()) {
@@ -489,6 +526,7 @@ public class PremiumActivity extends Activity {
                     String artist = c.getString(5), album = c.getString(6);
                     if (artist != null && !artist.trim().isEmpty() && !artist.equals("<unknown>")) item.artist = artist;
                     if (album != null && !album.trim().isEmpty() && !album.equals("<unknown>")) item.album = album;
+                    item.albumId = c.getLong(7);
                 }
                 found.add(item);
             }
@@ -651,9 +689,6 @@ public class PremiumActivity extends Activity {
             FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
             cp.setMargins(dp(16), 0, dp(16), dp(16)); stage.addView(captionView, cp);
         } else {
-            TextView placeholder = text("♫", 96, false, 0xFF5C5C5C);
-            placeholder.setGravity(Gravity.CENTER);
-            stage.addView(placeholder, new FrameLayout.LayoutParams(-1, -1));
             playerArt = new ImageView(this); playerArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
             stage.addView(playerArt, new FrameLayout.LayoutParams(-1, -1));
             loadArt(playerArt, e);
