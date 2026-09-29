@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
+import android.os.Build
 import androidx.room.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -26,22 +27,25 @@ data class Song(
 object LocalLibrary {
     suspend fun scan(context: Context): List<Song> = withContext(Dispatchers.IO) {
         val list = mutableListOf<Song>()
-        val c = MediaStore.Audio.Media
-        val columns = arrayOf(c._ID, c.TITLE, c.ARTIST, c.ALBUM, c.ALBUM_ID, c.DURATION,
-            c.SIZE, c.DATE_ADDED, c.MIME_TYPE, MediaStore.MediaColumns.RELATIVE_PATH)
+        val columns = mutableListOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.DATE_ADDED, MediaStore.Audio.Media.MIME_TYPE)
+        if (Build.VERSION.SDK_INT >= 29) columns += MediaStore.MediaColumns.RELATIVE_PATH
         try {
-            context.contentResolver.query(c.EXTERNAL_CONTENT_URI, columns, null, null, "${c.DATE_ADDED} DESC")?.use { cursor ->
+            context.contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, columns.toTypedArray(),
+                null, null, "${MediaStore.Audio.Media.DATE_ADDED} DESC")?.use { cursor ->
                 fun number(name: String): Long = cursor.getLong(cursor.getColumnIndexOrThrow(name))
                 fun value(name: String): String = cursor.getString(cursor.getColumnIndexOrThrow(name)) ?: ""
                 while (cursor.moveToNext()) {
-                    val id = number(c._ID)
-                    list += Song(id, ContentUris.withAppendedId(c.EXTERNAL_CONTENT_URI, id),
-                        value(c.TITLE).ifBlank { "Unknown song" },
-                        value(c.ARTIST).takeUnless { it == "<unknown>" }.orEmpty().ifBlank { "Unknown artist" },
-                        value(c.ALBUM).takeUnless { it == "<unknown>" }.orEmpty(),
-                        number(c.ALBUM_ID), number(c.DURATION), number(c.SIZE),
-                        value(MediaStore.MediaColumns.RELATIVE_PATH).trimEnd('/').ifBlank { "Music" },
-                        number(c.DATE_ADDED), value(c.MIME_TYPE))
+                    val id = number(MediaStore.Audio.Media._ID)
+                    list += Song(id, ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
+                        value(MediaStore.Audio.Media.TITLE).ifBlank { "Unknown song" },
+                        value(MediaStore.Audio.Media.ARTIST).takeUnless { it == "<unknown>" }.orEmpty().ifBlank { "Unknown artist" },
+                        value(MediaStore.Audio.Media.ALBUM).takeUnless { it == "<unknown>" }.orEmpty(),
+                        number(MediaStore.Audio.Media.ALBUM_ID), number(MediaStore.Audio.Media.DURATION), number(MediaStore.Audio.Media.SIZE),
+                        (if (Build.VERSION.SDK_INT >= 29) value(MediaStore.MediaColumns.RELATIVE_PATH) else "Music").trimEnd('/').ifBlank { "Music" },
+                        number(MediaStore.Audio.Media.DATE_ADDED), value(MediaStore.Audio.Media.MIME_TYPE))
                 }
             }
         } catch (_: SecurityException) { }

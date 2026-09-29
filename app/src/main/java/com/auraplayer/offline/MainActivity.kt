@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
             val lyricLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                 if (uri != null && lyricSongId != 0L) {
                     contentResolver.openInputStream(uri)?.use { input ->
-                        openFileOutput("lyrics_${lyricSongId}.lrc", MODE_PRIVATE).use(input::copyTo)
+                        openFileOutput("lyrics_${lyricSongId}.lrc", MODE_PRIVATE).use { output -> input.copyTo(output) }
                     }
                 }
             }
