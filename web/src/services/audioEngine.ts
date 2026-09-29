@@ -207,6 +207,7 @@ export class AudioEngine {
   }
 
   public setVolume(volume: number): void {
+    if (window.AuraNative) { window.AuraNative.volume(Math.max(0, Math.min(1, volume))); return; }
     this.audioElement.volume = Math.max(0, Math.min(1, volume));
   }
 
@@ -216,6 +217,7 @@ export class AudioEngine {
   }
 
   public setEqualizerBandGain(index: number, gainDb: number): void {
+    if (window.AuraNative) { window.AuraNative.band(index, gainDb); return; }
     if (this.filterNodes[index]) {
       this.filterNodes[index].gain.value = Math.max(-12, Math.min(12, gainDb));
     }
@@ -228,6 +230,7 @@ export class AudioEngine {
   }
 
   public setBassBoost(level: number): void {
+    if (window.AuraNative) { window.AuraNative.bass(level); return; }
     // level: 0 to 100
     if (this.bassBoostNode) {
       this.bassBoostNode.gain.value = (level / 100) * 12; // up to +12dB
@@ -235,6 +238,7 @@ export class AudioEngine {
   }
 
   public setTrebleBoost(level: number): void {
+    if (window.AuraNative) { window.AuraNative.treble(level); return; }
     if (this.trebleBoostNode) {
       this.trebleBoostNode.gain.value = (level / 100) * 10;
     }

@@ -13,6 +13,7 @@ import android.graphics.Color;
 import android.media.AudioManager;
 import android.media.MediaMetadata;
 import android.media.MediaPlayer;
+import android.media.audiofx.Equalizer;
 import android.media.session.MediaSession;
 import android.net.Uri;
 import android.os.Build;
@@ -36,9 +37,13 @@ public class AudioService extends Service {
     public String uri = "", title = "", artist = "";
     private final ArrayList<Track> queue = new ArrayList<>();
     private MediaPlayer player;
+    private Equalizer equalizer;
+    private final float[] bands = new float[5];
+    private float bass, treble;
     private boolean ready, requestedPlay;
     private int queueIndex = -1;
     private float speed = 1f;
+    private float volume = .85f;
     private MediaSession session;
     private AudioManager audioManager;
     private BroadcastReceiver noisy;
@@ -113,6 +118,8 @@ public class AudioService extends Service {
             next.setOnPreparedListener(mp -> {
                 if (mp != player) return;
                 ready = true;
+                mp.setVolume(volume, volume);
+                attachEqualizer();
                 if (position > 0) mp.seekTo(position);
                 if (requestedPlay) resume(); else updateNotification();
             });
@@ -163,6 +170,35 @@ public class AudioService extends Service {
         try { boolean wasPlaying = isPlaying(); player.setPlaybackParams(player.getPlaybackParams().setSpeed(value)); if (!wasPlaying) player.pause(); }
         catch (Exception ignored) { }
     }
+    private void attachEqualizer() {
+        try {
+            if (equalizer != null) equalizer.release();
+            equalizer = new Equalizer(0, player.getAudioSessionId());
+            equalizer.setEnabled(true);
+            for (int i = 0; i < bands.length; i++) applyBand(i);
+        } catch (Exception ignored) { equalizer = null; }
+    }
+    public void setBand(int index, float db) {
+        if (index < 0 || index >= bands.length) return;
+        bands[index] = Math.max(-12, Math.min(12, db)); applyBand(index);
+    }
+    public void setBass(float value) { bass = Math.max(0, Math.min(100, value)); applyBand(0); }
+    public void setTreble(float value) { treble = Math.max(0, Math.min(100, value)); applyBand(4); }
+    private void applyBand(int index) {
+        if (equalizer == null) return;
+        try {
+            short band = (short)Math.min(equalizer.getNumberOfBands() - 1,
+                Math.round(index * (equalizer.getNumberOfBands() - 1) / 4f));
+            short[] range = equalizer.getBandLevelRange();
+            float db = bands[index] + (index == 0 ? bass * .08f : index == 4 ? treble * .08f : 0);
+            short level = (short)Math.max(range[0], Math.min(range[1], Math.round(db * 100)));
+            equalizer.setBandLevel(band, level);
+        } catch (Exception ignored) { }
+    }
+    public void volume(float value) {
+        volume = Math.max(0, Math.min(1, value));
+        try { if (player != null) player.setVolume(volume, volume); } catch (Exception ignored) { }
+    }
 
     private PendingIntent action(String value, int request) {
         Intent i = new Intent(this, AudioService.class).setAction(value);
@@ -197,6 +233,7 @@ public class AudioService extends Service {
     }
     private void releasePlayer() {
         ready = false;
+        if (equalizer != null) { try { equalizer.release(); } catch (Exception ignored) { } equalizer = null; }
         if (player != null) { try { player.reset(); player.release(); } catch (Exception ignored) { } player = null; }
     }
     @Override public void onDestroy() {

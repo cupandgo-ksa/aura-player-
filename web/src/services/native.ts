@@ -9,6 +9,10 @@ export interface NativeBridge {
   resume(): void;
   seek(ms: number): void;
   speed(value: number): void;
+  volume(value: number): void;
+  band(index: number, value: number): void;
+  bass(value: number): void;
+  treble(value: number): void;
   state(): string;
 }
 

@@ -239,10 +239,14 @@ public class GlassActivity extends Activity {
                 .putExtra("queue", queueJson);
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
         }
-        @JavascriptInterface public void pause() { if (AudioService.instance != null) AudioService.instance.pause(); }
-        @JavascriptInterface public void resume() { if (AudioService.instance != null) AudioService.instance.resume(); }
-        @JavascriptInterface public void seek(int ms) { if (AudioService.instance != null) AudioService.instance.seek(ms); }
-        @JavascriptInterface public void speed(double speed) { if (AudioService.instance != null) AudioService.instance.speed((float)speed); }
+        @JavascriptInterface public void pause() { runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.pause(); }); }
+        @JavascriptInterface public void resume() { runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.resume(); }); }
+        @JavascriptInterface public void seek(int ms) { runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.seek(ms); }); }
+        @JavascriptInterface public void speed(double speed) { runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.speed((float)speed); }); }
+        @JavascriptInterface public void volume(double value) { runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.volume((float)value); }); }
+        @JavascriptInterface public void band(int index, double value) { runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.setBand(index, (float)value); }); }
+        @JavascriptInterface public void bass(double value) { runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.setBass((float)value); }); }
+        @JavascriptInterface public void treble(double value) { runOnUiThread(() -> { if (AudioService.instance != null) AudioService.instance.setTreble((float)value); }); }
         @JavascriptInterface public String state() {
             AudioService s = AudioService.instance;
             JSONObject o = new JSONObject();
