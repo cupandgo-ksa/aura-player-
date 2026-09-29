@@ -75,7 +75,7 @@ public class PremiumActivity extends Activity {
     private SeekBar progress;
     private View miniBar, playerView, homeView;
     private int active = -1, theme, tab = 0, sortMode = 0, resumePosition;
-    private boolean onPlayer, audioReady, videoReady, repeat, shuffle, locked, fullscreen, scrubbing;
+    private boolean onPlayer, audioReady, videoReady, repeat, shuffle, locked, fullscreen, scrubbing, enteringPip;
     private boolean keepPlayingAfterTheme;
     private float speed = 1f, downX, downY, startBrightness;
     private int startVolume, startPosition;
@@ -588,12 +588,13 @@ public class PremiumActivity extends Activity {
     }
     private void pictureInPicture() {
         if (Build.VERSION.SDK_INT >= 26 && videoReady) {
-            try { enterPictureInPictureMode(new PictureInPictureParams.Builder().build()); }
-            catch (Exception ex) { toast("Pop-up playback isn't available on this device"); }
+            try { enteringPip = enterPictureInPictureMode(new PictureInPictureParams.Builder().build()); }
+            catch (Exception ex) { enteringPip = false; toast("Pop-up playback isn't available on this device"); }
         }
     }
     @Override public void onPictureInPictureModeChanged(boolean pip, Configuration config) {
         super.onPictureInPictureModeChanged(pip, config);
+        enteringPip = pip;
         if (playerTop != null) playerTop.setVisibility(pip ? View.GONE : View.VISIBLE);
         if (playerControls != null) playerControls.setVisibility(pip ? View.GONE : View.VISIBLE);
     }
@@ -693,12 +694,17 @@ public class PremiumActivity extends Activity {
         } else {
             for (int n = active + 1; n < media.size(); n++) if (media.get(n).video == media.get(active).video) { selected = n; break; }
         }
-        if (selected >= 0) { prepare(selected, true); if (onPlayer) showPlayer(); else refreshHome(); }
+        if (selected >= 0) {
+            if (onPlayer) { savePosition(); release(); active = selected; showPlayer(); }
+            else { prepare(selected, true); refreshHome(); }
+        }
     }
     private void previous() {
         if (active < 0) return;
         for (int n = active - 1; n >= 0; n--) if (media.get(n).video == media.get(active).video) {
-            prepare(n, true); if (onPlayer) showPlayer(); else refreshHome(); return;
+            if (onPlayer) { savePosition(); release(); active = n; showPlayer(); }
+            else { prepare(n, true); refreshHome(); }
+            return;
         }
         jump(0);
     }
@@ -730,7 +736,7 @@ public class PremiumActivity extends Activity {
     }
     private void release() {
         videoReady = false; videoEngine = null; audioReady = false;
-        if (video != null) { video.stopPlayback(); video = null; }
+        if (video != null) video.stopPlayback();
         if (audio != null) { audio.release(); audio = null; }
     }
     @Override public void onBackPressed() {
@@ -743,7 +749,7 @@ public class PremiumActivity extends Activity {
         super.onPause(); savePosition();
         if (audioReady && audio.isPlaying()) audio.pause();
         if (videoReady && video != null && video.isPlaying() &&
-            (Build.VERSION.SDK_INT < 26 || !isInPictureInPictureMode())) video.pause();
+            (Build.VERSION.SDK_INT < 26 || (!isInPictureInPictureMode() && !enteringPip))) video.pause();
     }
     @Override protected void onDestroy() {
         handler.removeCallbacks(ticker); thumbnails.shutdownNow(); release(); super.onDestroy();
