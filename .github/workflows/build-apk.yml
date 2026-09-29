@@ -48,7 +48,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Launch app on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
-        continue-on-error: true
+        continue-on-error: false
         with:
           api-level: 35
           target: google_apis
@@ -61,11 +61,11 @@ jobs:
             adb shell am start -n com.auraplayer.offline/.GlassActivity
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
-            sleep 12
+            sleep 35
             adb exec-out screencap -p > glass-smoke.png
             adb logcat -d -s AndroidRuntime:E chromium:E AURA_WEB:V > glass-smoke.log
             adb shell dumpsys activity activities | grep 'mResumedActivity\|topResumedActivity' >> glass-smoke.log || true
-            if grep -qE 'FATAL EXCEPTION|Root length 0|Root length -1|WebView error' glass-smoke.log; then cat glass-smoke.log; exit 1; fi
+            if grep -qE 'FATAL EXCEPTION|Root length 0|Root length -1|WebView error' glass-smoke.log || ! grep -qE 'Root length [1-9][0-9]*' glass-smoke.log; then cat glass-smoke.log; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
