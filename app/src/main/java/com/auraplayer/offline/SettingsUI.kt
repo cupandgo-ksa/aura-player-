@@ -24,7 +24,7 @@ fun SettingsPage(model: PlayerModel, light: Boolean) {
     var eqName by remember { mutableStateOf("Normal") }
 
     androidx.compose.foundation.lazy.LazyColumn(
-        contentPadding = PaddingValues(horizontal = 18.dp, bottom = 20.dp),
+        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
