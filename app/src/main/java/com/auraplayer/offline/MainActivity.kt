@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
     @Volatile private var webReady = false
     private var controller: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
+    @Volatile private var pendingPlayId: String? = null
 
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private lateinit var notificationLauncher: androidx.activity.result.ActivityResultLauncher<String>
@@ -190,7 +191,9 @@ class MainActivity : ComponentActivity() {
         future.addListener({
             try {
                 controller = future.get().also { it.addListener(playerListener) }
-                pushPlayerState()
+                val pending = pendingPlayId
+                pendingPlayId = null
+                if (pending != null) playSongById(pending) else pushPlayerState()
             } catch (_: Exception) {
                 controller = null
             }
@@ -237,6 +240,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun playSongById(id: String) {
+        val target = songs.firstOrNull { it.id.toString() == id } ?: return
+        val p = controller
+        if (p == null) {
+            pendingPlayId = id
+            connectController()
+            return
+        }
+        val index = songs.indexOfFirst { it.id == target.id }.coerceAtLeast(0)
+        val queueMatches = p.mediaItemCount == songs.size &&
+            index < p.mediaItemCount &&
+            p.getMediaItemAt(index).mediaId == id
+
+        if (queueMatches) {
+            p.seekToDefaultPosition(index)
+        } else {
+            p.setMediaItems(songs.map(::item), index, 0L)
+        }
+        p.prepare()
+        p.play()
+        pushPlayerState()
+    }
+
     inner class NativeBridge {
         @JavascriptInterface
         fun getLibrary(): String = libraryJson
@@ -248,15 +274,7 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun play(id: String) {
-            runOnUiThread {
-                val target = songs.firstOrNull { it.id.toString() == id } ?: return@runOnUiThread
-                val p = controller ?: return@runOnUiThread
-                val index = songs.indexOfFirst { it.id == target.id }.coerceAtLeast(0)
-                p.setMediaItems(songs.map(::item), index, 0L)
-                p.prepare()
-                p.play()
-                pushPlayerState()
-            }
+            runOnUiThread { playSongById(id) }
         }
 
         @JavascriptInterface
@@ -280,7 +298,14 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun next() {
             runOnUiThread {
-                controller?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() }
+                controller?.let { p ->
+                    when {
+                        p.hasNextMediaItem() -> p.seekToNextMediaItem()
+                        p.mediaItemCount > 1 -> p.seekToDefaultPosition(0)
+                    }
+                    p.prepare()
+                    p.play()
+                }
                 pushPlayerState()
             }
         }
@@ -288,9 +313,14 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun previous() {
             runOnUiThread {
-                controller?.let {
-                    if (it.currentPosition > 3000) it.seekTo(0)
-                    else if (it.hasPreviousMediaItem()) it.seekToPreviousMediaItem()
+                controller?.let { p ->
+                    when {
+                        p.currentPosition > 3000 -> p.seekTo(0)
+                        p.hasPreviousMediaItem() -> p.seekToPreviousMediaItem()
+                        p.mediaItemCount > 1 -> p.seekToDefaultPosition(p.mediaItemCount - 1)
+                    }
+                    p.prepare()
+                    p.play()
                 }
                 pushPlayerState()
             }
