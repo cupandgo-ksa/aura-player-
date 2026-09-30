@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.appwidget.AppWidgetManager
 import android.media.AudioManager
+import android.media.audiofx.Visualizer
 import android.media.AudioDeviceInfo
 import android.content.ComponentName
 import android.content.ContentUris
@@ -49,12 +50,19 @@ class MainActivity : ComponentActivity() {
     @Volatile private var pendingPlayId: String? = null
     private var smokeTest = false
     private var smokeScheduled = false
+    private var beatRequested = false
+    private var visualizer: Visualizer? = null
+    private var beatLevel = 0.0
 
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private lateinit var notificationLauncher: androidx.activity.result.ActivityResultLauncher<String>
+    private lateinit var beatPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
 
     private val playerListener = object : Player.Listener {
-        override fun onIsPlayingChanged(isPlaying: Boolean) = pushPlayerState()
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            pushPlayerState()
+            if (isPlaying) maybeStartBeatVisualizer() else pushBeatLevel(0.0)
+        }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             Log.d("ASMusicTest", "TRANSITION:" + (mediaItem?.mediaMetadata?.title ?: ""))
             pushPlayerState()
@@ -67,6 +75,7 @@ class MainActivity : ComponentActivity() {
     private val poll = object : Runnable {
         override fun run() {
             pushPlayerState()
+            if (beatRequested && visualizer == null) maybeStartBeatVisualizer()
             handler.postDelayed(this, 400)
         }
     }
@@ -82,6 +91,9 @@ class MainActivity : ComponentActivity() {
             else Toast.makeText(this, "Music access is needed to show your songs", Toast.LENGTH_LONG).show()
         }
         notificationLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        beatPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+            if (allowed) maybeStartBeatVisualizer()
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -234,6 +246,32 @@ class MainActivity : ComponentActivity() {
             Log.d("ASMusicTest", if (ok) "SMOKE_TAP_SWITCH_PASS" else "SMOKE_TAP_SWITCH_FAIL")
         }, 3500)
         handler.postDelayed({ webView.evaluateJavascript("window.__asSmokeTap && window.__asSmokeTap(0)", null) }, 3900)
+        handler.postDelayed({ webView.evaluateJavascript("document.getElementById('queueButton').click()", null) }, 4500)
+        handler.postDelayed({
+            webView.evaluateJavascript("document.querySelectorAll('#queueItems .queue-row').length") { rows ->
+                Log.d("ASMusicTest", if (rows.toIntOrNull()?.let { it >= 3 } == true) "SMOKE_QUEUE_PASS" else "SMOKE_QUEUE_FAIL:$rows")
+            }
+            webView.evaluateJavascript("document.getElementById('sheetClose').click()", null)
+        }, 5300)
+        handler.postDelayed({
+            webView.evaluateJavascript("document.getElementById('playerFavorite').click()", null)
+        }, 5500)
+        handler.postDelayed({
+            webView.evaluateJavascript("document.getElementById('playerFavorite').getAttribute('aria-pressed')") { pressed ->
+                Log.d("ASMusicTest", if (pressed?.contains("true") == true) "SMOKE_FAVORITE_PASS" else "SMOKE_FAVORITE_FAIL:$pressed")
+            }
+            webView.evaluateJavascript("getComputedStyle(document.getElementById('toast')).backgroundColor") { color ->
+                Log.d("ASMusicTest", if (color?.contains("0, 0, 0, 0") == true || color?.contains("transparent") == true) "SMOKE_NO_BOX_PASS" else "SMOKE_NO_BOX_FAIL:$color")
+            }
+        }, 5900)
+        handler.postDelayed({
+            webView.evaluateJavascript("document.getElementById('miniOpen').click()", null)
+        }, 6100)
+        handler.postDelayed({
+            webView.evaluateJavascript("Number(document.getElementById('player').style.getPropertyValue('--beat'))") { beat ->
+                Log.d("ASMusicTest", "SMOKE_BEAT_LEVEL:$beat")
+            }
+        }, 7300)
         handler.postDelayed({
             val p = controller
             val ok = p != null && p.currentMediaItemIndex == 1 && p.isPlaying
@@ -260,6 +298,73 @@ class MainActivity : ComponentActivity() {
             val ok = controller?.isPlaying == true
             Log.d("ASMusicTest", if (ok) "SMOKE_BACKGROUND_PASS" else "SMOKE_BACKGROUND_FAIL")
         }, 11400)
+    }
+
+    private fun pushBeatLevel(value: Double) {
+        if (!webReady || !beatRequested) return
+        val safe = value.coerceIn(0.0, 1.0)
+        webView.evaluateJavascript("window.nativeBeatLevel && window.nativeBeatLevel($safe)", null)
+    }
+
+    private fun releaseBeatVisualizer() {
+        visualizer?.let { effect ->
+            try { effect.enabled = false; effect.release() } catch (_: Exception) {}
+        }
+        visualizer = null
+        beatLevel = 0.0
+        if (webReady) webView.evaluateJavascript("window.nativeBeatLevel && window.nativeBeatLevel(0)", null)
+    }
+
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private fun maybeStartBeatVisualizer() {
+        if (!beatRequested || visualizer != null || !webReady ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        val sessionId = controller?.audioSessionId ?: C.AUDIO_SESSION_ID_UNSET
+        if (sessionId == C.AUDIO_SESSION_ID_UNSET || sessionId <= 0) return
+        try {
+            val effect = Visualizer(sessionId)
+            effect.captureSize = 256
+            effect.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
+                    if (!beatRequested || waveform == null || waveform.isEmpty()) return
+                    var sum = 0.0
+                    for (sample in waveform) {
+                        val v = (sample.toInt() and 0xff) - 128
+                        sum += v.toDouble() * v
+                    }
+                    val rms = kotlin.math.sqrt(sum / waveform.size) / 55.0
+                    val target = (rms * 1.4).coerceIn(0.0, 1.0)
+                    beatLevel = if (target > beatLevel) beatLevel * .28 + target * .72 else beatLevel * .68 + target * .32
+                    webView.post { if (beatRequested) pushBeatLevel(beatLevel) }
+                }
+                override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
+            }, Visualizer.getMaxCaptureRate().coerceAtMost(20000), true, false)
+            effect.enabled = true
+            visualizer = effect
+        } catch (_: Exception) {
+            releaseBeatVisualizer()
+        }
+    }
+
+    private fun pushQueueState() {
+        val p = controller
+        if (p != null && p.mediaItemCount == 0) primeQueueIfEmpty()
+        val queue = JSONArray()
+        val active = controller
+        if (active != null) {
+            for (i in 0 until active.mediaItemCount) {
+                val m = active.getMediaItemAt(i)
+                queue.put(JSONObject()
+                    .put("index", i)
+                    .put("id", m.mediaId)
+                    .put("title", m.mediaMetadata.title?.toString().orEmpty())
+                    .put("artist", m.mediaMetadata.artist?.toString().orEmpty())
+                    .put("current", i == active.currentMediaItemIndex))
+            }
+        }
+        webView.evaluateJavascript(
+            "window.nativeQueueState && window.nativeQueueState(${JSONObject.quote(queue.toString())})", null
+        )
     }
 
     private fun pushLibrary() {
@@ -507,19 +612,22 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
-        fun getQueue(): String {
-            val p = controller ?: return "[]"
-            val arr = JSONArray()
-            for (i in 0 until p.mediaItemCount) {
-                val m = p.getMediaItemAt(i)
-                arr.put(JSONObject()
-                    .put("index", i)
-                    .put("id", m.mediaId)
-                    .put("title", m.mediaMetadata.title?.toString().orEmpty())
-                    .put("artist", m.mediaMetadata.artist?.toString().orEmpty())
-                    .put("current", i == p.currentMediaItemIndex))
+        fun requestQueue() = runOnUiThread { pushQueueState() }
+
+        @JavascriptInterface
+        fun startBeatVisualizer() = runOnUiThread {
+            beatRequested = true
+            if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                maybeStartBeatVisualizer()
+            } else {
+                beatPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
-            return arr.toString()
+        }
+
+        @JavascriptInterface
+        fun stopBeatVisualizer() = runOnUiThread {
+            beatRequested = false
+            releaseBeatVisualizer()
         }
 
         @JavascriptInterface
@@ -606,8 +714,19 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) hideStatusBar()
     }
 
+    override fun onPause() {
+        releaseBeatVisualizer()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (beatRequested) maybeStartBeatVisualizer()
+    }
+
     override fun onDestroy() {
         handler.removeCallbacks(poll)
+        releaseBeatVisualizer()
         controller?.removeListener(playerListener)
         controllerFuture?.let(MediaController::releaseFuture)
         controller = null

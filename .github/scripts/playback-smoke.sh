@@ -24,6 +24,7 @@ done
 sleep 4
 adb shell pm grant com.auraplayer.offline android.permission.READ_MEDIA_AUDIO
 adb shell pm grant com.auraplayer.offline android.permission.POST_NOTIFICATIONS || true
+adb shell pm grant com.auraplayer.offline android.permission.RECORD_AUDIO
 adb logcat -c
 adb shell am force-stop com.auraplayer.offline
 adb shell am start -n com.auraplayer.offline/.MainActivity --ez smokeTest true
@@ -34,6 +35,9 @@ grep -q 'SMOKE_LIBRARY:' playback-smoke.log
 grep -q 'SMOKE_FIRST_TAP_PASS' playback-smoke.log
 grep -q 'SMOKE_TAP_SWITCH_PASS' playback-smoke.log
 grep -q 'SMOKE_AUTO_NEXT_PASS' playback-smoke.log
+grep -q 'SMOKE_QUEUE_PASS' playback-smoke.log
+grep -q 'SMOKE_FAVORITE_PASS' playback-smoke.log
+grep -q 'SMOKE_NO_BOX_PASS' playback-smoke.log
 grep -q 'SMOKE_NEXT_BUTTON_PASS' playback-smoke.log
 grep -q 'SMOKE_PREVIOUS_BUTTON_PASS' playback-smoke.log
 grep -q 'SMOKE_SHUFFLE_BUTTON_PASS' playback-smoke.log
