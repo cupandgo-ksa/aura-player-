@@ -5,12 +5,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <application android:allowBackup="false" android:label="A S media-player" android:icon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
+    <application android:allowBackup="false" android:label="A S Music" android:icon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
         <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|uiMode">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity>
         <service android:name=".MusicService" android:exported="true" android:foregroundServiceType="mediaPlayback">
             <intent-filter><action android:name="androidx.media3.session.MediaSessionService"/></intent-filter>
         </service>
+        <receiver android:name=".MusicWidgetProvider" android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/music_widget_info" />
+        </receiver>
     </application>
 </manifest>
