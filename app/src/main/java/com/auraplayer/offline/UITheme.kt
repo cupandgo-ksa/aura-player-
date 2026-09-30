@@ -61,13 +61,13 @@ fun GlassBox(modifier: Modifier = Modifier, light: Boolean, radius: Int = 24, co
 fun WaterBackground(theme: String, content: @Composable BoxScope.() -> Unit) {
     val light = theme == "light"
     val amoled = theme == "amoled"
+    val background = if (light)
+        Brush.verticalGradient(listOf(Color(0xFFDFF7FF), Color(0xFFF8FBFF), Color(0xFFE9EEFF)))
+    else
+        Brush.verticalGradient(listOf(Color(0xFF17364E), UiNight, Color(0xFF17152A)))
     Box(
-        Modifier.fillMaxSize().background(
-            when {
-                amoled -> Color.Black
-                light -> Brush.verticalGradient(listOf(Color(0xFFDFF7FF), Color(0xFFF8FBFF), Color(0xFFE9EEFF)))
-                else -> Brush.verticalGradient(listOf(Color(0xFF17364E), UiNight, Color(0xFF17152A)))
-            }
+        Modifier.fillMaxSize().then(
+            if (amoled) Modifier.background(Color.Black) else Modifier.background(background)
         )
     ) {
         if (!amoled) {
