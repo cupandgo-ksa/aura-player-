@@ -20,6 +20,9 @@ class MusicService : MediaSessionService() {
         const val STOP = "com.auraplayer.offline.STOP"
         const val EQ = "com.auraplayer.offline.EQ"
         const val HEADPHONES = "com.auraplayer.offline.HEADPHONES"
+        const val WIDGET_PREVIOUS = "com.auraplayer.offline.WIDGET_PREVIOUS"
+        const val WIDGET_TOGGLE = "com.auraplayer.offline.WIDGET_TOGGLE"
+        const val WIDGET_NEXT = "com.auraplayer.offline.WIDGET_NEXT"
     }
     private lateinit var player: ExoPlayer
     private var session: MediaSession? = null
@@ -51,6 +54,7 @@ class MusicService : MediaSessionService() {
         }
         restore()
         session = MediaSession.Builder(this, player).build()
+        MusicWidgetProvider.updateAll(this, player)
         handler.post(savePosition)
     }
     private fun persist() {
@@ -66,7 +70,8 @@ class MusicService : MediaSessionService() {
         getSharedPreferences("session", MODE_PRIVATE).edit()
             .putString("items", items.toString()).putInt("index", player.currentMediaItemIndex.coerceAtLeast(0))
             .putLong("position", player.currentPosition.coerceAtLeast(0)).putBoolean("shuffle", player.shuffleModeEnabled)
-            .putInt("repeat", player.repeatMode).apply()
+            .putInt("repeat", player.repeatMode).putBoolean("playing", player.isPlaying).apply()
+        MusicWidgetProvider.updateAll(this, player)
     }
     private fun restore() {
         val prefs = getSharedPreferences("session", MODE_PRIVATE)
@@ -99,6 +104,21 @@ class MusicService : MediaSessionService() {
             }
             STOP -> { player.stop(); player.clearMediaItems(); stopSelf() }
             HEADPHONES -> player.setHandleAudioBecomingNoisy(intent.getBooleanExtra("pause", true))
+            WIDGET_PREVIOUS -> {
+                if (player.currentPosition > 3000) player.seekTo(0)
+                else if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
+            }
+            WIDGET_TOGGLE -> {
+                if (player.mediaItemCount > 0) {
+                    if (player.isPlaying) player.pause() else {
+                        player.prepare()
+                        player.play()
+                    }
+                }
+            }
+            WIDGET_NEXT -> {
+                if (player.hasNextMediaItem()) player.seekToNextMediaItem()
+            }
             EQ -> {
                 try {
                     equalizer?.release()
@@ -122,6 +142,7 @@ class MusicService : MediaSessionService() {
                 } catch (_: Exception) { equalizer = null }
             }
         }
+        MusicWidgetProvider.updateAll(this, player)
         return super.onStartCommand(intent, flags, startId)
     }
     override fun onDestroy() {
