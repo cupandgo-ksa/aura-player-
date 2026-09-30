@@ -6,7 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -33,10 +33,10 @@ fun HomePage(model: PlayerModel, light: Boolean, play: (Song) -> Unit, more: (So
             GlassBox(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), light, 30) {
                 Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Offline Library", color = if (light) UiInk else Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text("${songs.size} songs • private on-device", color = (if (light) UiInk else Color.White).copy(.56f), fontSize = 13.sp)
+                        Text("Library", color = if (light) UiInk else Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("${songs.size} songs • personal collection", color = (if (light) UiInk else Color.White).copy(.56f), fontSize = 13.sp)
                     }
-                    Icon(Icons.Rounded.CloudOff, null, tint = WaterBlue, modifier = Modifier.size(30.dp))
+                    Icon(Icons.Rounded.LibraryMusic, null, tint = WaterBlue, modifier = Modifier.size(30.dp))
                 }
             }
         }
