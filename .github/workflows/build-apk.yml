@@ -40,6 +40,11 @@ jobs:
           target: aosp_atd
           arch: x86_64
           profile: pixel_2
+          disk-size: 1024M
+          ram-size: 1536M
+          heap-size: 256M
+          sdcard-path-or-size: 64M
+          emulator-boot-timeout: 480
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -camera-back none
           script: |
