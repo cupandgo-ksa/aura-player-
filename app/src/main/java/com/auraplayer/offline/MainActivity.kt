@@ -239,7 +239,7 @@ class MainActivity : ComponentActivity() {
             val ok = p != null && p.currentMediaItemIndex == 1 && p.isPlaying
             Log.d("ASMusicTest", if (ok) "SMOKE_AUTO_NEXT_PASS" else "SMOKE_AUTO_NEXT_FAIL")
         }, 8200)
-        handler.postDelayed({ webView.evaluateJavascript("document.getElementById('next').click()", null) }, 8400)
+        handler.postDelayed({ webView.evaluateJavascript("document.getElementById('playerNext').click()", null) }, 8400)
         handler.postDelayed({
             Log.d("ASMusicTest", if (controller?.currentMediaItemIndex == 2) "SMOKE_NEXT_BUTTON_PASS" else "SMOKE_NEXT_BUTTON_FAIL")
         }, 9000)
@@ -248,7 +248,7 @@ class MainActivity : ComponentActivity() {
             Log.d("ASMusicTest", if (controller?.currentMediaItemIndex == 1) "SMOKE_PREVIOUS_BUTTON_PASS" else "SMOKE_PREVIOUS_BUTTON_FAIL")
         }, 9700)
         handler.postDelayed({
-            webView.evaluateJavascript("document.getElementById('shuffle').click(); document.getElementById('repeat').click()", null)
+            webView.evaluateJavascript("document.getElementById('playerShuffle').click(); document.getElementById('playerRepeat').click()", null)
         }, 9800)
         handler.postDelayed({
             val p = controller
