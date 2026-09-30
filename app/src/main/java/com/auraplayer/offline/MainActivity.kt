@@ -319,7 +319,7 @@ class MainActivity : ComponentActivity() {
     private fun maybeStartBeatVisualizer() {
         if (!beatRequested || visualizer != null || !webReady ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
-        val sessionId = controller?.audioSessionId ?: C.AUDIO_SESSION_ID_UNSET
+        val sessionId = MusicService.instance?.currentAudioSessionId() ?: C.AUDIO_SESSION_ID_UNSET
         if (sessionId == C.AUDIO_SESSION_ID_UNSET || sessionId <= 0) return
         try {
             val effect = Visualizer(sessionId)

@@ -16,6 +16,8 @@ import org.json.JSONObject
 
 class MusicService : MediaSessionService() {
     companion object {
+        @Volatile var instance: MusicService? = null
+            private set
         const val SLEEP = "com.auraplayer.offline.SLEEP"
         const val STOP = "com.auraplayer.offline.STOP"
         const val EQ = "com.auraplayer.offline.EQ"
@@ -38,6 +40,7 @@ class MusicService : MediaSessionService() {
     }
     override fun onCreate() {
         super.onCreate()
+        instance = this
         player = ExoPlayer.Builder(this).build().apply {
             setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             setHandleAudioBecomingNoisy(true)
@@ -167,7 +170,10 @@ class MusicService : MediaSessionService() {
         MusicWidgetProvider.updateAll(this, player)
         return super.onStartCommand(intent, flags, startId)
     }
+    fun currentAudioSessionId(): Int = if (::player.isInitialized) player.audioSessionId else C.AUDIO_SESSION_ID_UNSET
+
     override fun onDestroy() {
+        instance = null
         handler.removeCallbacks(savePosition)
         sleepJob?.let(handler::removeCallbacks)
         persist()
