@@ -8,64 +8,56 @@ import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
 import androidx.media3.common.Player
-import org.json.JSONArray
 
 class MusicWidgetProvider : AppWidgetProvider() {
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        ids.forEach { updateOne(context, manager, it, null) }
+    override fun onUpdate(context: Context, manager: AppWidgetManager, appWidgetIds: IntArray) {
+        appWidgetIds.forEach { manager.updateAppWidget(it, buildViews(context)) }
     }
 
     companion object {
-        fun updateAll(context: Context, player: Player?) {
+        fun updateAll(context: Context, player: Player) {
+            val item = player.currentMediaItem
+            val title = item?.mediaMetadata?.title?.toString().orEmpty().ifBlank { "A S Music" }
+            val artist = item?.mediaMetadata?.artist?.toString().orEmpty().ifBlank { "Personal Music Player" }
+            context.getSharedPreferences("widget_state", Context.MODE_PRIVATE).edit()
+                .putString("title", title)
+                .putString("artist", artist)
+                .putBoolean("playing", player.isPlaying)
+                .apply()
+
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, MusicWidgetProvider::class.java))
-            ids.forEach { updateOne(context, manager, it, player) }
+            ids.forEach { manager.updateAppWidget(it, buildViews(context)) }
         }
 
-        private fun updateOne(context: Context, manager: AppWidgetManager, id: Int, player: Player?) {
-            val views = RemoteViews(context.packageName, R.layout.music_widget)
-            val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
+        private fun buildViews(context: Context): RemoteViews {
+            val prefs = context.getSharedPreferences("widget_state", Context.MODE_PRIVATE)
+            val playing = prefs.getBoolean("playing", false)
+            return RemoteViews(context.packageName, R.layout.music_widget).apply {
+                setTextViewText(R.id.widget_title, prefs.getString("title", "A S Music") ?: "A S Music")
+                setTextViewText(R.id.widget_artist, prefs.getString("artist", "Personal Music Player") ?: "Personal Music Player")
+                setImageViewResource(R.id.widget_play, if (playing) R.drawable.ic_widget_pause else R.drawable.ic_widget_play)
 
-            var title = player?.currentMediaItem?.mediaMetadata?.title?.toString().orEmpty()
-            var artist = player?.currentMediaItem?.mediaMetadata?.artist?.toString().orEmpty()
-            val playing = player?.isPlaying ?: prefs.getBoolean("playing", false)
+                val openIntent = Intent(context, MainActivity::class.java)
+                val openPending = PendingIntent.getActivity(
+                    context, 40, openIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                setOnClickPendingIntent(R.id.widget_root, openPending)
+                setOnClickPendingIntent(R.id.widget_icon, openPending)
 
-            if (title.isBlank()) {
-                try {
-                    val array = JSONArray(prefs.getString("items", "[]"))
-                    if (array.length() > 0) {
-                        val index = prefs.getInt("index", 0).coerceIn(0, array.length() - 1)
-                        val item = array.getJSONObject(index)
-                        title = item.optString("title", "A S Music")
-                        artist = item.optString("artist", "")
-                    }
-                } catch (_: Exception) { }
+                fun control(request: Int, actionName: String): PendingIntent {
+                    return PendingIntent.getService(
+                        context,
+                        request,
+                        Intent(context, MusicService::class.java).apply { action = actionName },
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                }
+                setOnClickPendingIntent(R.id.widget_previous, control(41, MusicService.WIDGET_PREVIOUS))
+                setOnClickPendingIntent(R.id.widget_play, control(42, MusicService.WIDGET_TOGGLE))
+                setOnClickPendingIntent(R.id.widget_next, control(43, MusicService.WIDGET_NEXT))
             }
-
-            if (title.isBlank()) title = "A S Music"
-            if (artist.isBlank()) artist = "Tap to open your music"
-
-            views.setTextViewText(R.id.widget_title, title)
-            views.setTextViewText(R.id.widget_artist, artist)
-            views.setTextViewText(R.id.widget_play, if (playing) "Ⅱ" else "▶")
-
-            val openApp = PendingIntent.getActivity(
-                context, 200,
-                Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_root, openApp)
-            views.setOnClickPendingIntent(R.id.widget_prev, servicePending(context, MusicService.WIDGET_PREVIOUS, 201))
-            views.setOnClickPendingIntent(R.id.widget_play, servicePending(context, MusicService.WIDGET_TOGGLE, 202))
-            views.setOnClickPendingIntent(R.id.widget_next, servicePending(context, MusicService.WIDGET_NEXT, 203))
-            manager.updateAppWidget(id, views)
         }
-
-        private fun servicePending(context: Context, action: String, request: Int): PendingIntent =
-            PendingIntent.getService(
-                context, request,
-                Intent(context, MusicService::class.java).setAction(action),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
     }
 }

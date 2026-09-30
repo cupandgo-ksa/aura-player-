@@ -1,6 +1,10 @@
 package com.auraplayer.offline
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -19,6 +23,7 @@ import androidx.compose.ui.unit.sp
 fun SettingsPage(model: PlayerModel, light: Boolean) {
     val fg = if (light) UiInk else Color.White
     val context = LocalContext.current
+    val widgetManager = remember(context) { AppWidgetManager.getInstance(context) }
     var sleepMenu by remember { mutableStateOf(false) }
     var eqMenu by remember { mutableStateOf(false) }
     var eqName by remember { mutableStateOf("Normal") }
@@ -90,6 +95,19 @@ fun SettingsPage(model: PlayerModel, light: Boolean) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(0, 10, 30, 60).forEach { sec ->
                         FilterChip(selected = model.settings.minSeconds == sec, onClick = { model.change("min", sec) }, label = { Text(if (sec == 0) "All" else "${sec}s") })
+                    }
+                }
+            }
+        }
+        item {
+            SettingGroup("Home Screen", light) {
+                SettingRow("Add Music Widget", "Previous • Play/Pause • Next", Icons.Rounded.Home, fg, true) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && widgetManager.isRequestPinAppWidgetSupported) {
+                        val provider = ComponentName(context, MusicWidgetProvider::class.java)
+                        val requested = widgetManager.requestPinAppWidget(provider, null, null)
+                        if (!requested) Toast.makeText(context, "Open Widgets and add A S Music", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Open Widgets and add A S Music", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
