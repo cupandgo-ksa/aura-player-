@@ -95,9 +95,14 @@ fun SettingsPage(model: PlayerModel, light: Boolean) {
             }
         }
         item {
-            SettingGroup("Privacy", light) {
-                SettingRow("Offline only", "No ads • no login • no tracking", Icons.Rounded.PrivacyTip, fg)
-                SettingRow("A S Music", "Personal local audio player", Icons.Rounded.Info, fg)
+            SettingGroup("About", light) {
+                SettingRow("A S Music", "Personal music player", Icons.Rounded.MusicNote, fg)
+                HorizontalDivider(color = fg.copy(.10f))
+                SettingRow("Developer", "Mohammed Ashik", Icons.Rounded.Person, fg)
+                HorizontalDivider(color = fg.copy(.10f))
+                SettingRow("Private & local", "No ads • no login • no tracking", Icons.Rounded.PrivacyTip, fg)
+                HorizontalDivider(color = fg.copy(.10f))
+                SettingRow("Version", "10.0", Icons.Rounded.Info, fg)
             }
         }
     }
