@@ -3,6 +3,8 @@ package com.auraplayer.offline
 import android.Manifest
 import android.annotation.SuppressLint
 import android.appwidget.AppWidgetManager
+import android.media.AudioManager
+import android.media.AudioDeviceInfo
 import android.content.ComponentName
 import android.content.ContentUris
 import android.content.Intent
@@ -45,6 +47,7 @@ class MainActivity : ComponentActivity() {
     private var controllerFuture: ListenableFuture<MediaController>? = null
 
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
+    private lateinit var notificationLauncher: androidx.activity.result.ActivityResultLauncher<String>
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) = pushPlayerState()
@@ -69,6 +72,11 @@ class MainActivity : ComponentActivity() {
         permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
             if (allowed) scanLibrary()
             else Toast.makeText(this, "Music access is needed to show your songs", Toast.LENGTH_LONG).show()
+        }
+        notificationLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
         webView = WebView(this).apply {
@@ -119,7 +127,6 @@ class MainActivity : ComponentActivity() {
     private fun scanLibrary() {
         lifecycleScope.launch {
             val result = LocalLibrary.scan(this@MainActivity)
-                .filter { it.duration >= 10_000L }
             songs.clear()
             songs.addAll(result)
             libraryJson = buildLibraryJson(result).toString()
@@ -143,7 +150,10 @@ class MainActivity : ComponentActivity() {
                     .put("artist", s.artist)
                     .put("album", s.album)
                     .put("durationMs", s.duration)
+                    .put("size", s.size)
                     .put("folder", s.folder)
+                    .put("dateAdded", s.dateAdded)
+                    .put("mime", s.mime)
                     .put("artwork", art)
             )
         }
@@ -218,6 +228,8 @@ class MainActivity : ComponentActivity() {
             .put("duration", duration)
             .put("shuffle", p.shuffleModeEnabled)
             .put("repeat", repeat)
+            .put("speed", p.playbackParameters.speed)
+            .put("queueCount", p.mediaItemCount)
             .toString()
         val quoted = JSONObject.quote(json)
         webView.post {
@@ -319,6 +331,117 @@ class MainActivity : ComponentActivity() {
         fun setVolume(value: Double) {
             runOnUiThread {
                 controller?.volume = value.toFloat().coerceIn(0f, 1f)
+            }
+        }
+
+        @JavascriptInterface
+        fun setSpeed(speed: Double) {
+            runOnUiThread {
+                controller?.setPlaybackSpeed(speed.toFloat().coerceIn(0.5f, 2.0f))
+                pushPlayerState()
+            }
+        }
+
+        @JavascriptInterface
+        fun setEqualizer(preset: String) {
+            startService(Intent(this@MainActivity, MusicService::class.java).apply {
+                action = MusicService.EQ
+                putExtra("preset", preset)
+            })
+        }
+
+        @JavascriptInterface
+        fun playNext(id: String) {
+            runOnUiThread {
+                val song = songs.firstOrNull { it.id.toString() == id } ?: return@runOnUiThread
+                controller?.let { p ->
+                    val at = (p.currentMediaItemIndex + 1).coerceAtMost(p.mediaItemCount)
+                    p.addMediaItem(at, item(song))
+                }
+                pushPlayerState()
+            }
+        }
+
+        @JavascriptInterface
+        fun addToQueue(id: String) {
+            runOnUiThread {
+                val song = songs.firstOrNull { it.id.toString() == id } ?: return@runOnUiThread
+                controller?.addMediaItem(item(song))
+                pushPlayerState()
+            }
+        }
+
+        @JavascriptInterface
+        fun clearQueue() {
+            runOnUiThread {
+                controller?.let { p ->
+                    if (p.mediaItemCount == 0) return@let
+                    val currentIndex = p.currentMediaItemIndex.coerceAtLeast(0)
+                    val currentItem = p.currentMediaItem
+                    val pos = p.currentPosition
+                    val wasPlaying = p.isPlaying
+                    p.clearMediaItems()
+                    if (currentItem != null) {
+                        p.setMediaItem(currentItem, pos)
+                        p.prepare()
+                        if (wasPlaying) p.play()
+                    }
+                }
+                pushPlayerState()
+            }
+        }
+
+        @JavascriptInterface
+        fun getQueue(): String {
+            val p = controller ?: return "[]"
+            val arr = JSONArray()
+            for (i in 0 until p.mediaItemCount) {
+                val m = p.getMediaItemAt(i)
+                arr.put(JSONObject()
+                    .put("index", i)
+                    .put("id", m.mediaId)
+                    .put("title", m.mediaMetadata.title?.toString().orEmpty())
+                    .put("artist", m.mediaMetadata.artist?.toString().orEmpty())
+                    .put("current", i == p.currentMediaItemIndex))
+            }
+            return arr.toString()
+        }
+
+        @JavascriptInterface
+        fun stopPlayback() {
+            startService(Intent(this@MainActivity, MusicService::class.java).apply {
+                action = MusicService.STOP
+            })
+        }
+
+        @JavascriptInterface
+        fun sleepEndOfSong() {
+            startService(Intent(this@MainActivity, MusicService::class.java).apply {
+                action = MusicService.SLEEP
+                putExtra("end", true)
+            })
+        }
+
+        @JavascriptInterface
+        fun getAudioOutput(): String {
+            val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+            val devices = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val active = devices.firstOrNull { d ->
+                when (d.type) {
+                    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                    AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                    AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                    AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                    AudioDeviceInfo.TYPE_USB_HEADSET,
+                    AudioDeviceInfo.TYPE_USB_DEVICE -> true
+                    else -> false
+                }
+            }
+            return when (active?.type) {
+                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth"
+                AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Wired Headphones"
+                AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE -> "USB Audio"
+                else -> "Phone Speaker"
             }
         }
 
