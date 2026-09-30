@@ -12,7 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.graphicsLayer
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -157,7 +157,7 @@ fun QueuePage(model: PlayerModel, light: Boolean, back: () -> Unit, save: () -> 
             Column(Modifier.weight(1f)) { Text("Playing Next", color = fg, fontSize = 26.sp, fontWeight = FontWeight.Bold); Text("${model.queue.size} songs", color = fg.copy(.48f), fontSize = 12.sp) }
             TextButton(onClick = save) { Text("Save") }
         }
-        LazyColumn(contentPadding = PaddingValues(horizontal = 14.dp, bottom = 16.dp)) {
+        LazyColumn(contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 16.dp)) {
             items(model.queue.mapIndexed { index, song -> index to song }, key = { "${it.second.id}-${it.first}" }) { (index, song) ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     AlbumArt(song, Modifier.size(48.dp)); Spacer(Modifier.width(10.dp))
