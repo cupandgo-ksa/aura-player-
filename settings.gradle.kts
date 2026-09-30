@@ -4,4 +4,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "A S media-player"
-include(":app")
+include(":app", ":videoapp")
