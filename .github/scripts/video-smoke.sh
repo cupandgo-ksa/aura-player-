@@ -1,9 +1,8 @@
 set -euo pipefail
-ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=160x90:rate=12 -t 3 -an -c:v mpeg4 -q:v 5 -y /tmp/AS_Video_Smoke.mp4
 adb install -r videoapp/build/outputs/apk/debug/videoapp-debug.apk
 for attempt in 1 2 3 4 5; do
   adb shell mkdir -p /sdcard/Movies/ASVideoSmoke || true
-  if adb push /tmp/AS_Video_Smoke.mp4 /sdcard/Movies/ASVideoSmoke/AS_Video_Smoke.mp4; then break; fi
+  if adb push videoapp/src/test/assets/smoke.mp4 /sdcard/Movies/ASVideoSmoke/AS_Video_Smoke.mp4; then break; fi
   if [ "$attempt" -eq 5 ]; then exit 1; fi
   sleep 4
 done
