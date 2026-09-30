@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -49,12 +50,26 @@ fun audioType(song: Song): String = when {
 @Composable
 fun GlassBox(modifier: Modifier = Modifier, light: Boolean, radius: Int = 24, content: @Composable BoxScope.() -> Unit) {
     val shape = RoundedCornerShape(radius.dp)
+    val glass = if (light)
+        Brush.verticalGradient(listOf(Color.White.copy(.78f), Color.White.copy(.50f), Color.White.copy(.38f)))
+    else
+        Brush.verticalGradient(listOf(Color.White.copy(.18f), Color.White.copy(.105f), Color.White.copy(.065f)))
     Box(
-        modifier.clip(shape)
-            .background(if (light) Color.White.copy(.64f) else Color.White.copy(.10f))
-            .border(1.dp, if (light) Color.White.copy(.88f) else Color.White.copy(.20f), shape),
-        content = content
-    )
+        modifier
+            .shadow(16.dp, shape, clip = false)
+            .clip(shape)
+            .background(glass)
+            .border(1.dp, if (light) Color.White.copy(.92f) else Color.White.copy(.26f), shape)
+    ) {
+        content()
+        Box(
+            Modifier.align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .height(1.dp)
+                .background(Color.White.copy(if (light) .82f else .32f))
+        )
+    }
 }
 
 @Composable
@@ -71,8 +86,9 @@ fun WaterBackground(theme: String, content: @Composable BoxScope.() -> Unit) {
         )
     ) {
         if (!amoled) {
-            Box(Modifier.size(270.dp).offset((-90).dp, 70.dp).clip(CircleShape).background(WaterBlue.copy(if (light) .19f else .13f)))
-            Box(Modifier.size(320.dp).align(Alignment.BottomEnd).offset(120.dp, 120.dp).clip(CircleShape).background(Color(0xFF8C7DFF).copy(if (light) .12f else .09f)))
+            Box(Modifier.size(300.dp).offset((-105).dp, 55.dp).clip(CircleShape).background(WaterBlue.copy(if (light) .18f else .14f)))
+            Box(Modifier.size(360.dp).align(Alignment.BottomEnd).offset(135.dp, 115.dp).clip(CircleShape).background(Color(0xFF9187FF).copy(if (light) .12f else .10f)))
+            Box(Modifier.size(180.dp).align(Alignment.CenterEnd).offset(95.dp, (-120).dp).clip(CircleShape).background(Color.White.copy(if (light) .20f else .045f)))
         }
         content()
     }
@@ -99,7 +115,7 @@ fun PermissionPage(light: Boolean, request: () -> Unit) {
         GlassBox(Modifier.size(88.dp), light, 44) { Icon(Icons.Rounded.LibraryMusic, null, tint = WaterBlue, modifier = Modifier.align(Alignment.Center).size(43.dp)) }
         Spacer(Modifier.height(20.dp))
         Text("Your music. Your phone.", color = fg, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("Offline local audio only. Nothing is uploaded.", color = fg.copy(.58f), fontSize = 14.sp)
+        Text("Your local music stays private on this phone.", color = fg.copy(.58f), fontSize = 14.sp)
         Spacer(Modifier.height(20.dp))
         Button(onClick = request, colors = ButtonDefaults.buttonColors(containerColor = WaterBlue, contentColor = UiInk)) { Text("Allow Music Access") }
     }
