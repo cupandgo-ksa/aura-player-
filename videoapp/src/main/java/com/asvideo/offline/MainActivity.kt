@@ -158,9 +158,10 @@ class MainActivity : ComponentActivity() {
                 delay(3000)
                 Log.d("ASVideoTest", "VIDEO_LIBRARY:" + library.size)
                 if (library.isNotEmpty()) playVideo(library[0])
-                delay(2200)
+                delay(7000)
                 Log.d("ASVideoTest", "VIDEO_STATE:controller=" + (controller != null) + ",state=" + controller?.playbackState +
-                    ",playWhenReady=" + controller?.playWhenReady + ",index=" + controller?.currentMediaItemIndex)
+                    ",playWhenReady=" + controller?.playWhenReady + ",index=" + controller?.currentMediaItemIndex +
+                    ",buffered=" + controller?.bufferedPosition + ",position=" + controller?.currentPosition)
                 Log.d("ASVideoTest", if (controller?.isPlaying == true) "VIDEO_PLAY_PASS" else "VIDEO_PLAY_FAIL")
                 Log.d("ASVideoTest", if (playerOpen) "VIDEO_UI_PASS" else "VIDEO_UI_FAIL")
                 controller?.pause()
@@ -191,6 +192,7 @@ class MainActivity : ComponentActivity() {
             subtitleUri = null
         }
         override fun onPlaybackStateChanged(playbackState: Int) {
+            Log.d("ASVideoTest", "VIDEO_STATE_CHANGE:" + playbackState)
             if (playbackState == Player.STATE_READY) duration = controller?.duration?.coerceAtLeast(0) ?: 0
         }
     }
