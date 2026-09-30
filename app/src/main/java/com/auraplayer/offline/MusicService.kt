@@ -49,28 +49,6 @@ class MusicService : MediaSessionService() {
                     if (stopAtEnd) {
                         stopAtEnd = false
                         player.pause()
-                        persist()
-                        return
-                    }
-
-                    val last = player.mediaItemCount - 1
-                    val current = player.currentMediaItemIndex.coerceAtLeast(0)
-                    when {
-                        current < last -> {
-                            player.seekToDefaultPosition(current + 1)
-                            player.prepare()
-                            player.play()
-                        }
-                        player.repeatMode == Player.REPEAT_MODE_ALL && player.mediaItemCount > 0 -> {
-                            player.seekToDefaultPosition(0)
-                            player.prepare()
-                            player.play()
-                        }
-                        player.repeatMode == Player.REPEAT_MODE_ONE && player.mediaItemCount > 0 -> {
-                            player.seekToDefaultPosition(current)
-                            player.prepare()
-                            player.play()
-                        }
                     }
                     persist()
                 }
@@ -143,7 +121,6 @@ class MusicService : MediaSessionService() {
             WIDGET_NEXT -> {
                 if (player.hasNextMediaItem()) player.seekToNextMediaItem()
                 else if (player.mediaItemCount > 1) player.seekToDefaultPosition(0)
-                player.prepare()
                 player.play()
             }
             EQ -> {
