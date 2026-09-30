@@ -22,7 +22,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -520,8 +520,8 @@ class MainActivity : ComponentActivity() {
                         })
                     if (gestureText.isNotEmpty()) Text(gestureText, color = Ink, modifier = Modifier.align(Alignment.Center).clip(RoundedCornerShape(20.dp))
                         .background(Dark.copy(alpha=.8f)).padding(14.dp), fontSize = 13.sp)
-                    AnimatedVisibility(controlsVisible || locked, modifier = Modifier.fillMaxSize()) {
-                        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha=.52f), Color.Transparent, Color.Black.copy(alpha=.6f))))) {
+                    Crossfade(targetState = controlsVisible || locked, modifier = Modifier.fillMaxSize(), label = "videoControls") { visible ->
+                        if (visible) Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha=.52f), Color.Transparent, Color.Black.copy(alpha=.6f))))) {
                             CircleButton(if (locked) Icons.Default.LockOpen else Icons.Default.Lock, if (locked) "Unlock" else "Lock",
                                 modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) { locked = !locked; controlsVisible = !locked }
                             if (!locked) {
