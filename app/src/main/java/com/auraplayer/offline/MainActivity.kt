@@ -372,6 +372,28 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
+        fun removeQueue(index: Int) {
+            runOnUiThread {
+                controller?.let { p ->
+                    if (index in 0 until p.mediaItemCount && index != p.currentMediaItemIndex) p.removeMediaItem(index)
+                }
+                pushPlayerState()
+            }
+        }
+
+        @JavascriptInterface
+        fun moveQueue(from: Int, to: Int) {
+            runOnUiThread {
+                controller?.let { p ->
+                    if (from in 0 until p.mediaItemCount && to in 0 until p.mediaItemCount && from != to) {
+                        p.moveMediaItem(from, to)
+                    }
+                }
+                pushPlayerState()
+            }
+        }
+
+        @JavascriptInterface
         fun clearQueue() {
             runOnUiThread {
                 controller?.let { p ->
