@@ -14,10 +14,14 @@ for n, hz in enumerate((440, 554, 659), start=1):
         w.writeframes(b"".join(frames))
 PY
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell mkdir -p /sdcard/Music/ASMusicSmoke
-adb push /tmp/AS_Smoke_01.wav /sdcard/Music/ASMusicSmoke/AS_Smoke_01.wav
-adb push /tmp/AS_Smoke_02.wav /sdcard/Music/ASMusicSmoke/AS_Smoke_02.wav
-adb push /tmp/AS_Smoke_03.wav /sdcard/Music/ASMusicSmoke/AS_Smoke_03.wav
+for attempt in 1 2 3 4 5; do
+  adb shell mkdir -p /sdcard/Music/ASMusicSmoke || true
+  if adb push /tmp/AS_Smoke_01.wav /sdcard/Music/ASMusicSmoke/AS_Smoke_01.wav &&
+     adb push /tmp/AS_Smoke_02.wav /sdcard/Music/ASMusicSmoke/AS_Smoke_02.wav &&
+     adb push /tmp/AS_Smoke_03.wav /sdcard/Music/ASMusicSmoke/AS_Smoke_03.wav; then break; fi
+  if [ "$attempt" -eq 5 ]; then exit 1; fi
+  sleep 4
+done
 for f in AS_Smoke_01.wav AS_Smoke_02.wav AS_Smoke_03.wav; do
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Music/ASMusicSmoke/$f" >/dev/null
 done
