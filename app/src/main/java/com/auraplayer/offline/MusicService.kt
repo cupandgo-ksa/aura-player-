@@ -106,7 +106,7 @@ class MusicService : MediaSessionService() {
                 player.prepare()
             }
             player.shuffleModeEnabled = prefs.getBoolean("shuffle", false)
-            player.repeatMode = prefs.getInt("repeat", Player.REPEAT_MODE_OFF)
+            player.repeatMode = prefs.getInt("repeat", Player.REPEAT_MODE_ALL)
         } catch (_: Exception) { }
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
@@ -122,8 +122,10 @@ class MusicService : MediaSessionService() {
             STOP -> { player.stop(); player.clearMediaItems(); stopSelf() }
             HEADPHONES -> player.setHandleAudioBecomingNoisy(intent.getBooleanExtra("pause", true))
             WIDGET_PREVIOUS -> {
-                if (player.currentPosition > 3000) player.seekTo(0)
-                else if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
+                val count = player.mediaItemCount
+                if (count > 1) player.seekToDefaultPosition((player.currentMediaItemIndex.coerceAtLeast(0) - 1 + count) % count)
+                else if (count == 1) player.seekTo(0)
+                if (count > 0) player.play()
             }
             WIDGET_TOGGLE -> {
                 if (player.mediaItemCount > 0) {
@@ -134,9 +136,10 @@ class MusicService : MediaSessionService() {
                 }
             }
             WIDGET_NEXT -> {
-                if (player.hasNextMediaItem()) player.seekToNextMediaItem()
-                else if (player.mediaItemCount > 1) player.seekToDefaultPosition(0)
-                player.play()
+                val count = player.mediaItemCount
+                if (count > 1) player.seekToDefaultPosition((player.currentMediaItemIndex.coerceAtLeast(0) + 1) % count)
+                else if (count == 1) player.seekTo(0)
+                if (count > 0) player.play()
             }
             EQ -> {
                 try {

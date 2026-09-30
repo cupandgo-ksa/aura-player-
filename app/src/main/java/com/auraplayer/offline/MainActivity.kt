@@ -239,11 +239,27 @@ class MainActivity : ComponentActivity() {
             val ok = p != null && p.currentMediaItemIndex == 1 && p.isPlaying
             Log.d("ASMusicTest", if (ok) "SMOKE_AUTO_NEXT_PASS" else "SMOKE_AUTO_NEXT_FAIL")
         }, 8200)
-        handler.postDelayed({ moveTaskToBack(true) }, 8500)
+        handler.postDelayed({ webView.evaluateJavascript("document.getElementById('next').click()", null) }, 8400)
+        handler.postDelayed({
+            Log.d("ASMusicTest", if (controller?.currentMediaItemIndex == 2) "SMOKE_NEXT_BUTTON_PASS" else "SMOKE_NEXT_BUTTON_FAIL")
+        }, 9000)
+        handler.postDelayed({ webView.evaluateJavascript("document.getElementById('previous').click()", null) }, 9100)
+        handler.postDelayed({
+            Log.d("ASMusicTest", if (controller?.currentMediaItemIndex == 1) "SMOKE_PREVIOUS_BUTTON_PASS" else "SMOKE_PREVIOUS_BUTTON_FAIL")
+        }, 9700)
+        handler.postDelayed({
+            webView.evaluateJavascript("document.getElementById('shuffle').click(); document.getElementById('repeat').click()", null)
+        }, 9800)
+        handler.postDelayed({
+            val p = controller
+            Log.d("ASMusicTest", if (p?.shuffleModeEnabled == true) "SMOKE_SHUFFLE_BUTTON_PASS" else "SMOKE_SHUFFLE_BUTTON_FAIL")
+            Log.d("ASMusicTest", if (p?.repeatMode == Player.REPEAT_MODE_ONE) "SMOKE_REPEAT_BUTTON_PASS" else "SMOKE_REPEAT_BUTTON_FAIL")
+        }, 10300)
+        handler.postDelayed({ moveTaskToBack(true) }, 10500)
         handler.postDelayed({
             val ok = controller?.isPlaying == true
             Log.d("ASMusicTest", if (ok) "SMOKE_BACKGROUND_PASS" else "SMOKE_BACKGROUND_FAIL")
-        }, 9300)
+        }, 11400)
     }
 
     private fun pushLibrary() {
@@ -308,6 +324,33 @@ class MainActivity : ComponentActivity() {
         pushPlayerState()
     }
 
+    private fun navigate(direction: Int) {
+        val p = controller ?: return
+        // A restored or cleared queue can contain only one item even when the
+        // library has many songs. Rebuild it before handling skip controls.
+        if (p.mediaItemCount < 2 && songs.size > 1) {
+            val currentId = currentSongId(p)
+            val index = songs.indexOfFirst { it.id.toString() == currentId }.coerceAtLeast(0)
+            val position = p.currentPosition.coerceAtLeast(0L)
+            p.setMediaItems(songs.map(::item), index, position)
+            p.prepare()
+        }
+        val count = p.mediaItemCount
+        if (count == 0) return
+        if (count > 1) {
+            if (p.shuffleModeEnabled && direction > 0 && p.hasNextMediaItem()) {
+                p.seekToNextMediaItem()
+            } else if (p.shuffleModeEnabled && direction < 0 && p.hasPreviousMediaItem()) {
+                p.seekToPreviousMediaItem()
+            } else {
+                val index = p.currentMediaItemIndex.coerceIn(0, count - 1)
+                p.seekToDefaultPosition((index + direction + count) % count)
+            }
+        } else p.seekTo(0)
+        p.play()
+        pushPlayerState()
+    }
+
     inner class NativeBridge {
         @JavascriptInterface
         fun getLibrary(): String = libraryJson
@@ -341,33 +384,10 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
-        fun next() {
-            runOnUiThread {
-                controller?.let { p ->
-                    when {
-                        p.hasNextMediaItem() -> p.seekToNextMediaItem()
-                        p.mediaItemCount > 1 -> p.seekToDefaultPosition(0)
-                    }
-                    p.play()
-                }
-                pushPlayerState()
-            }
-        }
+        fun next() = runOnUiThread { navigate(1) }
 
         @JavascriptInterface
-        fun previous() {
-            runOnUiThread {
-                controller?.let { p ->
-                    when {
-                        p.currentPosition > 3000 -> p.seekTo(0)
-                        p.hasPreviousMediaItem() -> p.seekToPreviousMediaItem()
-                        p.mediaItemCount > 1 -> p.seekToDefaultPosition(p.mediaItemCount - 1)
-                    }
-                    p.play()
-                }
-                pushPlayerState()
-            }
-        }
+        fun previous() = runOnUiThread { navigate(-1) }
 
         @JavascriptInterface
         fun seekPercent(percent: Double) {

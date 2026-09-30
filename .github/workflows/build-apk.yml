@@ -92,13 +92,17 @@ jobs:
             adb logcat -c
             adb shell am force-stop com.auraplayer.offline
             adb shell am start -n com.auraplayer.offline/.MainActivity --ez smokeTest true
-            sleep 12
+            sleep 15
             adb logcat -d ASMusicTest:D '*:S' > playback-smoke.log
             cat playback-smoke.log
             grep -q 'SMOKE_LIBRARY:' playback-smoke.log
             grep -q 'SMOKE_FIRST_TAP_PASS' playback-smoke.log
             grep -q 'SMOKE_TAP_SWITCH_PASS' playback-smoke.log
             grep -q 'SMOKE_AUTO_NEXT_PASS' playback-smoke.log
+            grep -q 'SMOKE_NEXT_BUTTON_PASS' playback-smoke.log
+            grep -q 'SMOKE_PREVIOUS_BUTTON_PASS' playback-smoke.log
+            grep -q 'SMOKE_SHUFFLE_BUTTON_PASS' playback-smoke.log
+            grep -q 'SMOKE_REPEAT_BUTTON_PASS' playback-smoke.log
             grep -q 'SMOKE_BACKGROUND_PASS' playback-smoke.log
             adb shell dumpsys media_session > media-session.txt
             grep -q 'com.auraplayer.offline' media-session.txt
