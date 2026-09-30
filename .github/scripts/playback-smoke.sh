@@ -40,6 +40,7 @@ grep -q 'SMOKE_FIRST_TAP_PASS' playback-smoke.log
 grep -q 'SMOKE_TAP_SWITCH_PASS' playback-smoke.log
 grep -q 'SMOKE_AUTO_NEXT_PASS' playback-smoke.log
 grep -q 'SMOKE_QUEUE_PASS' playback-smoke.log
+grep -q 'SMOKE_QUEUE_LAYOUT_PASS' playback-smoke.log
 grep -q 'SMOKE_FAVORITE_PASS' playback-smoke.log
 grep -q 'SMOKE_NO_BOX_PASS' playback-smoke.log
 grep -q 'SMOKE_NEXT_BUTTON_PASS' playback-smoke.log

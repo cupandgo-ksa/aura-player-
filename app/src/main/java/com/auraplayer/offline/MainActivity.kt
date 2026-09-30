@@ -251,6 +251,9 @@ class MainActivity : ComponentActivity() {
             webView.evaluateJavascript("document.querySelectorAll('#queueItems .queue-row').length") { rows ->
                 Log.d("ASMusicTest", if (rows.toIntOrNull()?.let { it >= 3 } == true) "SMOKE_QUEUE_PASS" else "SMOKE_QUEUE_FAIL:$rows")
             }
+            webView.evaluateJavascript("(function(){var x=document.getElementById('queueItems');return !!x && x.querySelectorAll('.queue-cover').length>=3 && x.scrollWidth<=x.clientWidth+2})()") { layout ->
+                Log.d("ASMusicTest", if (layout == "true") "SMOKE_QUEUE_LAYOUT_PASS" else "SMOKE_QUEUE_LAYOUT_FAIL:$layout")
+            }
             webView.evaluateJavascript("document.getElementById('sheetClose').click()", null)
         }, 5300)
         handler.postDelayed({
@@ -613,6 +616,18 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun requestQueue() = runOnUiThread { pushQueueState() }
+
+        @JavascriptInterface
+        fun playQueueIndex(index: Int) = runOnUiThread {
+            controller?.let { p ->
+                if (index in 0 until p.mediaItemCount) {
+                    p.seekToDefaultPosition(index)
+                    p.prepare()
+                    p.play()
+                    pushPlayerState()
+                }
+            }
+        }
 
         @JavascriptInterface
         fun startBeatVisualizer() = runOnUiThread {
