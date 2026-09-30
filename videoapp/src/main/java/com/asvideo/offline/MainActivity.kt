@@ -65,6 +65,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -158,6 +159,8 @@ class MainActivity : ComponentActivity() {
                 Log.d("ASVideoTest", "VIDEO_LIBRARY:" + library.size)
                 if (library.isNotEmpty()) playVideo(library[0])
                 delay(2200)
+                Log.d("ASVideoTest", "VIDEO_STATE:controller=" + (controller != null) + ",state=" + controller?.playbackState +
+                    ",playWhenReady=" + controller?.playWhenReady + ",index=" + controller?.currentMediaItemIndex)
                 Log.d("ASVideoTest", if (controller?.isPlaying == true) "VIDEO_PLAY_PASS" else "VIDEO_PLAY_FAIL")
                 Log.d("ASVideoTest", if (playerOpen) "VIDEO_UI_PASS" else "VIDEO_UI_FAIL")
                 controller?.pause()
@@ -181,6 +184,7 @@ class MainActivity : ComponentActivity() {
     } catch (_: Exception) { null }
 
     private val playerListener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) { Log.e("ASVideo", "Playback error " + error.errorCodeName, error) }
         override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             selected = library.firstOrNull { it.uri.toString() == mediaItem?.mediaId } ?: selected

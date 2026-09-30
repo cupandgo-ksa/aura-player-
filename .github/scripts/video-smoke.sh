@@ -14,7 +14,7 @@ adb shell pm grant com.asvideo.offline android.permission.POST_NOTIFICATIONS || 
 adb logcat -c
 adb shell am start -n com.asvideo.offline/.MainActivity --ez smokeTest true
 sleep 11
-adb logcat -d ASVideoTest:D '*:S' > video-smoke.log
+adb logcat -d ASVideoTest:D ASVideo:E AndroidRuntime:E '*:S' > video-smoke.log
 cat video-smoke.log
 grep -q 'VIDEO_LIBRARY:1' video-smoke.log
 grep -q 'VIDEO_PLAY_PASS' video-smoke.log
