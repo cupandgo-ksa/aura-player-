@@ -154,10 +154,10 @@ class MainActivity : ComponentActivity() {
         }
         if (intent.getBooleanExtra("smokeTest", false)) {
             lifecycleScope.launch {
-                delay(1800)
+                delay(3000)
                 Log.d("ASVideoTest", "VIDEO_LIBRARY:" + library.size)
                 if (library.isNotEmpty()) playVideo(library[0])
-                delay(1800)
+                delay(2200)
                 Log.d("ASVideoTest", if (controller?.isPlaying == true) "VIDEO_PLAY_PASS" else "VIDEO_PLAY_FAIL")
                 Log.d("ASVideoTest", if (playerOpen) "VIDEO_UI_PASS" else "VIDEO_UI_FAIL")
                 controller?.pause()
@@ -210,7 +210,10 @@ class MainActivity : ComponentActivity() {
             arrayOf(Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
         else if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.READ_MEDIA_VIDEO)
         else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-        if (required.any { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED })
+        val fullPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_EXTERNAL_STORAGE
+        val partialPermission = Build.VERSION.SDK_INT >= 34 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+        if (ContextCompat.checkSelfPermission(this, fullPermission) != PackageManager.PERMISSION_GRANTED && !partialPermission)
             permission.launch(required)
         else scanVideos()
     }

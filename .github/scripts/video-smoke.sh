@@ -8,11 +8,12 @@ for attempt in 1 2 3 4 5; do
 done
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Movies/ASVideoSmoke/AS_Video_Smoke.mp4 >/dev/null
 sleep 4
+adb shell content query --uri content://media/external/video/media --projection _id:_display_name | head -5 || true
 adb shell pm grant com.asvideo.offline android.permission.READ_MEDIA_VIDEO
 adb shell pm grant com.asvideo.offline android.permission.POST_NOTIFICATIONS || true
 adb logcat -c
 adb shell am start -n com.asvideo.offline/.MainActivity --ez smokeTest true
-sleep 8
+sleep 11
 adb logcat -d ASVideoTest:D '*:S' > video-smoke.log
 cat video-smoke.log
 grep -q 'VIDEO_LIBRARY:1' video-smoke.log
