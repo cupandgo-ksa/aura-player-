@@ -42,7 +42,14 @@ class MusicService : MediaSessionService() {
             setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             setHandleAudioBecomingNoisy(true)
             addListener(object : Player.Listener {
-                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = persist()
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    if (stopAtEnd && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                        stopAtEnd = false
+                        player.pause()
+                        player.seekTo(0)
+                    }
+                    persist()
+                }
                 override fun onIsPlayingChanged(isPlaying: Boolean) = persist()
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState != Player.STATE_ENDED) return
@@ -64,10 +71,12 @@ class MusicService : MediaSessionService() {
         val items = JSONArray()
         for (i in 0 until player.mediaItemCount) {
             val item = player.getMediaItemAt(i)
-            items.put(JSONObject().put("uri", item.localConfiguration?.uri.toString())
+            items.put(JSONObject().put("id", item.mediaId)
+                .put("uri", item.localConfiguration?.uri.toString())
                 .put("title", item.mediaMetadata.title?.toString().orEmpty())
                 .put("artist", item.mediaMetadata.artist?.toString().orEmpty())
-                .put("album", item.mediaMetadata.albumTitle?.toString().orEmpty()))
+                .put("album", item.mediaMetadata.albumTitle?.toString().orEmpty())
+                .put("artwork", item.mediaMetadata.artworkUri?.toString().orEmpty()))
         }
         getSharedPreferences("session", MODE_PRIVATE).edit()
             .putString("items", items.toString()).putInt("index", player.currentMediaItemIndex.coerceAtLeast(0))
@@ -81,17 +90,23 @@ class MusicService : MediaSessionService() {
             val array = JSONArray(prefs.getString("items", "[]"))
             val items = (0 until array.length()).map { i ->
                 val o = array.getJSONObject(i)
-                MediaItem.Builder().setUri(o.getString("uri"))
-                    .setMediaMetadata(androidx.media3.common.MediaMetadata.Builder()
-                        .setTitle(o.optString("title")).setArtist(o.optString("artist"))
-                        .setAlbumTitle(o.optString("album")).build()).build()
+                val meta = androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(o.optString("title"))
+                    .setArtist(o.optString("artist"))
+                    .setAlbumTitle(o.optString("album"))
+                o.optString("artwork").takeIf { it.isNotBlank() }?.let { meta.setArtworkUri(android.net.Uri.parse(it)) }
+                MediaItem.Builder()
+                    .setMediaId(o.optString("id"))
+                    .setUri(o.getString("uri"))
+                    .setMediaMetadata(meta.build())
+                    .build()
             }
             if (items.isNotEmpty()) {
                 player.setMediaItems(items, prefs.getInt("index", 0).coerceIn(0, items.lastIndex), prefs.getLong("position", 0))
                 player.prepare()
             }
             player.shuffleModeEnabled = prefs.getBoolean("shuffle", false)
-            player.repeatMode = prefs.getInt("repeat", Player.REPEAT_MODE_ALL)
+            player.repeatMode = prefs.getInt("repeat", Player.REPEAT_MODE_OFF)
         } catch (_: Exception) { }
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session

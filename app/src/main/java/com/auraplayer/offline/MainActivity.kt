@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -46,13 +47,18 @@ class MainActivity : ComponentActivity() {
     private var controller: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     @Volatile private var pendingPlayId: String? = null
+    private var smokeTest = false
+    private var smokeScheduled = false
 
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private lateinit var notificationLauncher: androidx.activity.result.ActivityResultLauncher<String>
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) = pushPlayerState()
-        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = pushPlayerState()
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            Log.d("ASMusicTest", "TRANSITION:" + (mediaItem?.mediaMetadata?.title ?: ""))
+            pushPlayerState()
+        }
         override fun onPlaybackStateChanged(playbackState: Int) = pushPlayerState()
         override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) = pushPlayerState()
         override fun onRepeatModeChanged(repeatMode: Int) = pushPlayerState()
@@ -68,6 +74,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        smokeTest = intent.getBooleanExtra("smokeTest", false)
         hideStatusBar()
 
         permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
@@ -131,7 +138,12 @@ class MainActivity : ComponentActivity() {
             songs.clear()
             songs.addAll(result)
             libraryJson = buildLibraryJson(result).toString()
+            primeQueueIfEmpty()
             pushLibrary()
+            if (smokeTest && !smokeScheduled && result.size >= 2) {
+                smokeScheduled = true
+                scheduleSmokeTest()
+            }
         }
     }
 
@@ -191,6 +203,7 @@ class MainActivity : ComponentActivity() {
         future.addListener({
             try {
                 controller = future.get().also { it.addListener(playerListener) }
+                primeQueueIfEmpty()
                 val pending = pendingPlayId
                 pendingPlayId = null
                 if (pending != null) playSongById(pending) else pushPlayerState()
@@ -198,6 +211,39 @@ class MainActivity : ComponentActivity() {
                 controller = null
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun primeQueueIfEmpty() {
+        val p = controller ?: return
+        if (p.mediaItemCount == 0 && songs.isNotEmpty()) {
+            p.setMediaItems(songs.map(::item))
+            p.prepare()
+        }
+    }
+
+    private fun scheduleSmokeTest() {
+        Log.d("ASMusicTest", "SMOKE_LIBRARY:" + songs.size)
+        handler.postDelayed({ webView.evaluateJavascript("window.__asSmokeTap && window.__asSmokeTap(0)", null) }, 1400)
+        handler.postDelayed({
+            val ok = controller?.currentMediaItemIndex == 0
+            Log.d("ASMusicTest", if (ok) "SMOKE_FIRST_TAP_PASS" else "SMOKE_FIRST_TAP_FAIL")
+        }, 2300)
+        handler.postDelayed({ webView.evaluateJavascript("window.__asSmokeTap && window.__asSmokeTap(1)", null) }, 2600)
+        handler.postDelayed({
+            val ok = controller?.currentMediaItemIndex == 1
+            Log.d("ASMusicTest", if (ok) "SMOKE_TAP_SWITCH_PASS" else "SMOKE_TAP_SWITCH_FAIL")
+        }, 3500)
+        handler.postDelayed({ webView.evaluateJavascript("window.__asSmokeTap && window.__asSmokeTap(0)", null) }, 3900)
+        handler.postDelayed({
+            val p = controller
+            val ok = p != null && p.currentMediaItemIndex == 1 && p.isPlaying
+            Log.d("ASMusicTest", if (ok) "SMOKE_AUTO_NEXT_PASS" else "SMOKE_AUTO_NEXT_FAIL")
+        }, 8200)
+        handler.postDelayed({ moveTaskToBack(true) }, 8500)
+        handler.postDelayed({
+            val ok = controller?.isPlaying == true
+            Log.d("ASMusicTest", if (ok) "SMOKE_BACKGROUND_PASS" else "SMOKE_BACKGROUND_FAIL")
+        }, 9300)
     }
 
     private fun pushLibrary() {
@@ -242,6 +288,7 @@ class MainActivity : ComponentActivity() {
 
     private fun playSongById(id: String) {
         val target = songs.firstOrNull { it.id.toString() == id } ?: return
+        Log.d("ASMusicTest", "REQUEST_PLAY:" + target.title)
         val p = controller
         if (p == null) {
             pendingPlayId = id
@@ -249,15 +296,13 @@ class MainActivity : ComponentActivity() {
             return
         }
         val index = songs.indexOfFirst { it.id == target.id }.coerceAtLeast(0)
-        val queueMatches = p.mediaItemCount == songs.size &&
-            index < p.mediaItemCount &&
-            p.getMediaItemAt(index).mediaId == id
-
-        if (!queueMatches) {
+        val queueMatchesLibrary = p.mediaItemCount == songs.size &&
+            songs.indices.all { i -> p.getMediaItemAt(i).mediaId == songs[i].id.toString() }
+        if (!queueMatchesLibrary) {
             p.setMediaItems(songs.map(::item), index, 0L)
             p.prepare()
         } else {
-            p.seekToDefaultPosition(index)
+            p.seekTo(index, 0L)
         }
         p.play()
         pushPlayerState()
