@@ -253,12 +253,12 @@ class MainActivity : ComponentActivity() {
             index < p.mediaItemCount &&
             p.getMediaItemAt(index).mediaId == id
 
-        if (queueMatches) {
-            p.seekToDefaultPosition(index)
-        } else {
+        if (!queueMatches) {
             p.setMediaItems(songs.map(::item), index, 0L)
+            p.prepare()
+        } else {
+            p.seekToDefaultPosition(index)
         }
-        p.prepare()
         p.play()
         pushPlayerState()
     }
@@ -303,7 +303,6 @@ class MainActivity : ComponentActivity() {
                         p.hasNextMediaItem() -> p.seekToNextMediaItem()
                         p.mediaItemCount > 1 -> p.seekToDefaultPosition(0)
                     }
-                    p.prepare()
                     p.play()
                 }
                 pushPlayerState()
@@ -319,7 +318,6 @@ class MainActivity : ComponentActivity() {
                         p.hasPreviousMediaItem() -> p.seekToPreviousMediaItem()
                         p.mediaItemCount > 1 -> p.seekToDefaultPosition(p.mediaItemCount - 1)
                     }
-                    p.prepare()
                     p.play()
                 }
                 pushPlayerState()
