@@ -32,7 +32,7 @@ adb shell pm grant com.auraplayer.offline android.permission.RECORD_AUDIO
 adb logcat -c
 adb shell am force-stop com.auraplayer.offline
 adb shell am start -n com.auraplayer.offline/.MainActivity --ez smokeTest true
-sleep 15
+sleep 22
 adb logcat -d ASMusicTest:D '*:S' > playback-smoke.log
 cat playback-smoke.log
 grep -q 'SMOKE_LIBRARY:' playback-smoke.log
@@ -49,6 +49,7 @@ grep -q 'SMOKE_SHUFFLE_BUTTON_PASS' playback-smoke.log
 grep -q 'SMOKE_REPEAT_BUTTON_PASS' playback-smoke.log
 grep -q 'SMOKE_BACKGROUND_PASS' playback-smoke.log
 grep -q 'SMOKE_FFT_BANDS_PASS' playback-smoke.log
+grep -q 'SMOKE_CLIP_PASS' playback-smoke.log
 adb shell dumpsys media_session > media-session.txt
 grep -q 'com.auraplayer.offline' media-session.txt
 adb shell am start -n com.auraplayer.offline/.MainActivity

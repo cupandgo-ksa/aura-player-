@@ -326,6 +326,29 @@ class MainActivity : ComponentActivity() {
             val ok = controller?.isPlaying == true
             Log.d("ASMusicTest", if (ok) "SMOKE_BACKGROUND_PASS" else "SMOKE_BACKGROUND_FAIL")
         }, 11400)
+        handler.postDelayed({
+            val song = songs.firstOrNull()
+            if (song == null) {
+                Log.d("ASMusicTest", "SMOKE_CLIP_FAIL:no audio")
+            } else {
+                audioCutter.export(song, 200L, 1300L) { result ->
+                    result.onSuccess { uri ->
+                        try {
+                            val saved = contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: 0L
+                            val check = MediaPlayer()
+                            check.setDataSource(this, uri)
+                            check.prepare()
+                            val duration = check.duration
+                            check.release()
+                            Log.d("ASMusicTest", if (saved > 500 && duration in 650..1600) "SMOKE_CLIP_PASS" else "SMOKE_CLIP_FAIL:bytes=$saved duration=$duration")
+                            contentResolver.delete(uri, null, null)
+                        } catch (error: Exception) {
+                            Log.d("ASMusicTest", "SMOKE_CLIP_FAIL:${error.message}")
+                        }
+                    }.onFailure { error -> Log.d("ASMusicTest", "SMOKE_CLIP_FAIL:${error.message}") }
+                }
+            }
+        }, 11800)
     }
 
     private fun pushBeatLevel(value: Double) {
