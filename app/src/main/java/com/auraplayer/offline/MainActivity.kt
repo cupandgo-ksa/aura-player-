@@ -331,7 +331,7 @@ class MainActivity : ComponentActivity() {
             effect.captureSize = 256
             effect.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
                 override fun onWaveFormDataCapture(visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
-                    if (!beatRequested || waveform == null || waveform.isEmpty()) return
+                    if (!beatRequested || controller?.isPlaying != true || waveform == null || waveform.isEmpty()) return
                     var sum = 0.0
                     for (sample in waveform) {
                         val v = (sample.toInt() and 0xff) - 128
