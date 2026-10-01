@@ -279,7 +279,7 @@ class MainActivity : ComponentActivity() {
             }
         }, 7300)
         handler.postDelayed({
-            webView.evaluateJavascript("Math.max(...Array.from(document.querySelectorAll('#art .cover-beat i')).map(b => Number(b.style.getPropertyValue('--band')) || 0))") { bands ->
+            webView.evaluateJavascript("(Date.now()-Number(document.getElementById('art').dataset.fftAt||0)<700 ? Math.max(...Array.from(document.querySelectorAll('#art .cover-beat i')).map(b => Number(b.style.getPropertyValue('--band')) || 0)) : 0)") { bands ->
                 val strength = bands?.toDoubleOrNull() ?: 0.0
                 Log.d("ASMusicTest", if (strength > 0.02) "SMOKE_FFT_BANDS_PASS" else "SMOKE_FFT_BANDS_FAIL:$bands")
             }
