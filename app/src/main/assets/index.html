@@ -248,6 +248,22 @@
     .art .cover-beat i:nth-child(5){height:33px;transform:scaleY(calc(.38 + var(--beat,0)*1.05))}
     .player:not(.is-playing) .cover-beat{opacity:.20}
     .reduce-motion .cover-beat,.reduce-motion .cover-beat i{transition:none!important}
+
+    /* Keep the bars fixed; the captured audio controls brightness only. */
+    .art .cover-beat{opacity:calc(.18 + var(--beat,0)*.68);transition:opacity .13s linear}
+    .art .cover-beat i,.art .cover-beat i:nth-child(n){transform:none;transition:none}
+    .player:not(.is-playing) .art .cover-beat{opacity:.13}
+    .art-wrap::before,.art-wrap::after{transform:none;transition:opacity .16s linear}
+
+    /* Closing follows the same path as opening, including Android Back. */
+    .player{transition:transform .42s cubic-bezier(.32,0,.72,.26),visibility 0s linear .42s}
+    .player.open{transition:transform .48s cubic-bezier(.18,.8,.22,1),visibility 0s linear}
+    .queue{display:flex;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .32s ease,visibility 0s linear .42s}
+    .queue.open{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .32s ease,visibility 0s linear}
+    .queue .sheet{transform:translateY(104%);transition:transform .42s cubic-bezier(.32,0,.72,.26);animation:none!important}
+    .queue.open .sheet{transform:translateY(0);transition:transform .46s cubic-bezier(.18,.8,.22,1);animation:none!important}
+    .screen.active .page-heading,.screen.active .page-copy{animation:screenIn .42s cubic-bezier(.2,.8,.2,1) both}
+    @media(prefers-reduced-motion:reduce){.screen.active .page-heading,.screen.active .page-copy{animation:none!important}.player,.queue,.queue .sheet{transition:none!important}}
 </style>
 </head>
 <body>
@@ -340,7 +356,7 @@
       else if(type==='lyrics'){title.textContent='Offline lyrics';renderLyrics(body)}
       else if(type==='details'){title.textContent='Song details';if(!selected){body.innerHTML='<div class="empty">No song selected.</div>'}else body.innerHTML='<div class="empty" style="text-align:left"><b>'+esc(selected.title)+'</b><br>'+esc(selected.artist)+'<br>'+esc(selected.album||'No album')+'<br>'+esc(selected.mime||'audio')+'<br>'+esc(selected.folder||'')+'<br>'+Math.round((selected.size||0)/1024/1024*10)/10+' MB · '+esc(selected.duration||'')+'</div>'}
       else {title.textContent=selected?selected.title:'Options';addOption(body,'play','Play now',function(){closeSheet();selected&&playSong(selected)});if(selected&&nativeMode){addOption(body,'next','Play next',function(){Android.playNext(String(selected.id));notice('Added next');closeSheet()});addOption(body,'list','Add to queue',function(){Android.addToQueue(String(selected.id));notice('Added to queue');closeSheet()})}addOption(body,'heart',(selected&&selected.favorite)?'Remove from favorites':'Add to favorites',function(){toggleFavorite(selected);closeSheet()});addOption(body,'note',(selected&&pins[String(selected.id)])?'Unpin':'Pin to top',function(){if(selected){pins[String(selected.id)]=!pins[String(selected.id)];saveLocalMaps();render();notice(pins[String(selected.id)]?'Pinned':'Unpinned')}closeSheet()});addOption(body,'list','View queue',function(){openSheet('queue')});addOption(body,'note','Bookmark current position',function(){if(selected){bookmarks[String(selected.id)]={position:nativeMode?nativePosition:Math.round($('audio').currentTime*1000),name:'Bookmark'};saveLocalMaps();notice('Bookmark saved')}closeSheet()});if(selected&&bookmarks[String(selected.id)])addOption(body,'play','Jump to bookmark',function(){var b=bookmarks[String(selected.id)],d=nativeMode?nativeDuration:Math.round(($('audio').duration||0)*1000);if(d>0){var pct=100*b.position/d;if(nativeMode)Android.seekPercent(pct);else $('audio').currentTime=b.position/1000}closeSheet()});addOption(body,'note','Song details',function(){openSheet('details')});addOption(body,'note','Sleep timer',function(){openSheet('sleep')});if(nativeMode)addOption(body,'note','Stop playback',function(){Android.stopPlayback();closeSheet()})}
-      $('sheetLayer').classList.add('open');$('sheetLayer').setAttribute('aria-hidden','false')}
+      var wasOpen=$('sheetLayer').classList.contains('open');$('sheetLayer').classList.add('open');$('sheetLayer').setAttribute('aria-hidden','false');if(wasOpen&&!prefs.reduce&&body.animate)body.animate([{opacity:.35,transform:'translateY(10px)'},{opacity:1,transform:'translateY(0)'}],{duration:260,easing:'cubic-bezier(.2,.8,.2,1)'})}
     function addOption(parent,symbol,label,fn){var b=document.createElement('button');b.className='sheet-option';b.innerHTML=icon(symbol)+'<span>'+esc(label)+'</span>';b.addEventListener('click',fn);parent.appendChild(b)}
     function closeSheet(){clearInterval(lyricsTimer);$('sheetLayer').classList.remove('open');$('sheetLayer').setAttribute('aria-hidden','true')}
     document.querySelectorAll('[data-nav],[data-go]').forEach(function(b){b.addEventListener('click',function(){pageTo(b.dataset.nav||b.dataset.go)})});document.querySelectorAll('[data-filter]').forEach(function(b){b.addEventListener('click',function(){filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(function(x){x.classList.toggle('selected',x===b)});render()})});

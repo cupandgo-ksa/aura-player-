@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
     private var beatRequested = false
     private var visualizer: Visualizer? = null
     private var beatLevel = 0.0
+    private var beatAverage = 0.0
 
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private lateinit var notificationLauncher: androidx.activity.result.ActivityResultLauncher<String>
@@ -315,6 +316,7 @@ class MainActivity : ComponentActivity() {
         }
         visualizer = null
         beatLevel = 0.0
+        beatAverage = 0.0
         if (webReady) webView.evaluateJavascript("window.nativeBeatLevel && window.nativeBeatLevel(0)", null)
     }
 
@@ -335,9 +337,11 @@ class MainActivity : ComponentActivity() {
                         val v = (sample.toInt() and 0xff) - 128
                         sum += v.toDouble() * v
                     }
-                    val rms = kotlin.math.sqrt(sum / waveform.size) / 55.0
-                    val target = (rms * 1.4).coerceIn(0.0, 1.0)
-                    beatLevel = if (target > beatLevel) beatLevel * .28 + target * .72 else beatLevel * .68 + target * .32
+                    val rms = kotlin.math.sqrt(sum / waveform.size) / 128.0
+                    beatAverage = if (beatAverage == 0.0) rms else beatAverage * .94 + rms * .06
+                    val transient = ((rms - beatAverage) * 5.0).coerceIn(0.0, 1.0)
+                    val target = (rms * .22 + transient * .78).coerceIn(0.0, 1.0)
+                    beatLevel = if (target > beatLevel) beatLevel * .18 + target * .82 else beatLevel * .78 + target * .22
                     webView.post { if (beatRequested) pushBeatLevel(beatLevel) }
                 }
                 override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
