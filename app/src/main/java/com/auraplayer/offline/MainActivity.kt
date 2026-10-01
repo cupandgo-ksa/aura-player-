@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
     private var visualizer: Visualizer? = null
     private var beatLevel = 0.0
     private var beatAverage = 0.0
+    private val bandAverage = DoubleArray(9)
+    private val bandLevels = DoubleArray(9)
 
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private lateinit var notificationLauncher: androidx.activity.result.ActivityResultLauncher<String>
@@ -310,6 +312,13 @@ class MainActivity : ComponentActivity() {
         webView.evaluateJavascript("window.nativeBeatLevel && window.nativeBeatLevel($safe)", null)
     }
 
+    private fun pushBeatBands(values: DoubleArray) {
+        if (!webReady || !beatRequested) return
+        val bands = JSONArray()
+        values.forEach { bands.put(it.coerceIn(0.0, 1.0)) }
+        webView.evaluateJavascript("window.nativeBeatBands && window.nativeBeatBands(${bands})", null)
+    }
+
     private fun releaseBeatVisualizer() {
         visualizer?.let { effect ->
             try { effect.enabled = false; effect.release() } catch (_: Exception) {}
@@ -317,6 +326,8 @@ class MainActivity : ComponentActivity() {
         visualizer = null
         beatLevel = 0.0
         beatAverage = 0.0
+        bandAverage.fill(0.0)
+        bandLevels.fill(0.0)
         if (webReady) webView.evaluateJavascript("window.nativeBeatLevel && window.nativeBeatLevel(0)", null)
     }
 
@@ -344,8 +355,29 @@ class MainActivity : ComponentActivity() {
                     beatLevel = if (target > beatLevel) beatLevel * .18 + target * .82 else beatLevel * .78 + target * .22
                     webView.post { if (beatRequested) pushBeatLevel(beatLevel) }
                 }
-                override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
-            }, Visualizer.getMaxCaptureRate().coerceAtMost(20000), true, false)
+                override fun onFftDataCapture(visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int) {
+                    if (!beatRequested || controller?.isPlaying != true || fft == null || fft.size < 124) return
+                    val edges = intArrayOf(1, 2, 3, 5, 8, 12, 18, 27, 41, 61)
+                    val snapshot = DoubleArray(9)
+                    for (band in 0 until 9) {
+                        var total = 0.0
+                        var count = 0
+                        for (bin in edges[band] until edges[band + 1]) {
+                            val re = fft[bin * 2].toDouble()
+                            val im = fft[bin * 2 + 1].toDouble()
+                            total += kotlin.math.sqrt(re * re + im * im)
+                            count++
+                        }
+                        val energy = total / count / 80.0
+                        bandAverage[band] = if (bandAverage[band] == 0.0) energy else bandAverage[band] * .91 + energy * .09
+                        val transient = ((energy - bandAverage[band]) * 3.2).coerceIn(0.0, 1.0)
+                        val target = (energy * .42 + transient * .85).coerceIn(0.0, 1.0)
+                        bandLevels[band] = if (target > bandLevels[band]) bandLevels[band] * .28 + target * .72 else bandLevels[band] * .65 + target * .35
+                        snapshot[band] = bandLevels[band]
+                    }
+                    webView.post { if (beatRequested && controller?.isPlaying == true) pushBeatBands(snapshot) }
+                }
+            }, Visualizer.getMaxCaptureRate().coerceAtMost(20000), true, true)
             effect.enabled = true
             visualizer = effect
         } catch (_: Exception) {
