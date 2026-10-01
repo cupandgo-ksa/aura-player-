@@ -279,6 +279,12 @@ class MainActivity : ComponentActivity() {
             }
         }, 7300)
         handler.postDelayed({
+            webView.evaluateJavascript("Math.max(...Array.from(document.querySelectorAll('#art .cover-beat i')).map(b => Number(b.style.getPropertyValue('--band')) || 0))") { bands ->
+                val strength = bands?.toDoubleOrNull() ?: 0.0
+                Log.d("ASMusicTest", if (strength > 0.02) "SMOKE_FFT_BANDS_PASS" else "SMOKE_FFT_BANDS_FAIL:$bands")
+            }
+        }, 7500)
+        handler.postDelayed({
             val p = controller
             val ok = p != null && p.currentMediaItemIndex == 1 && p.isPlaying
             Log.d("ASMusicTest", if (ok) "SMOKE_AUTO_NEXT_PASS" else "SMOKE_AUTO_NEXT_FAIL")

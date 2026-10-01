@@ -48,6 +48,7 @@ grep -q 'SMOKE_PREVIOUS_BUTTON_PASS' playback-smoke.log
 grep -q 'SMOKE_SHUFFLE_BUTTON_PASS' playback-smoke.log
 grep -q 'SMOKE_REPEAT_BUTTON_PASS' playback-smoke.log
 grep -q 'SMOKE_BACKGROUND_PASS' playback-smoke.log
+grep -q 'SMOKE_FFT_BANDS_PASS' playback-smoke.log
 adb shell dumpsys media_session > media-session.txt
 grep -q 'com.auraplayer.offline' media-session.txt
 adb shell am start -n com.auraplayer.offline/.MainActivity
