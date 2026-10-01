@@ -9,6 +9,11 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.common.audio.AudioProcessor
+import android.content.Context
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import org.json.JSONArray
@@ -21,6 +26,7 @@ class MusicService : MediaSessionService() {
         const val SLEEP = "com.auraplayer.offline.SLEEP"
         const val STOP = "com.auraplayer.offline.STOP"
         const val EQ = "com.auraplayer.offline.EQ"
+        const val LISTENING_EFFECT = "com.auraplayer.offline.LISTENING_EFFECT"
         const val HEADPHONES = "com.auraplayer.offline.HEADPHONES"
         const val WIDGET_PREVIOUS = "com.auraplayer.offline.WIDGET_PREVIOUS"
         const val WIDGET_TOGGLE = "com.auraplayer.offline.WIDGET_TOGGLE"
@@ -32,6 +38,7 @@ class MusicService : MediaSessionService() {
     private var sleepJob: Runnable? = null
     private var stopAtEnd = false
     private var equalizer: Equalizer? = null
+    private val listeningEffects = ListeningEffects()
     private val savePosition = object : Runnable {
         override fun run() {
             persist()
@@ -41,7 +48,16 @@ class MusicService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        player = ExoPlayer.Builder(this).build().apply {
+        listeningEffects.mode = getSharedPreferences("session", MODE_PRIVATE).getString("listeningEffect", "Original") ?: "Original"
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(arrayOf<AudioProcessor>(listeningEffects))
+                    .build()
+            }
+        }
+        player = ExoPlayer.Builder(this, renderers).build().apply {
             setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             setHandleAudioBecomingNoisy(true)
             addListener(object : Player.Listener {
@@ -124,6 +140,11 @@ class MusicService : MediaSessionService() {
             }
             STOP -> { player.stop(); player.clearMediaItems(); stopSelf() }
             HEADPHONES -> player.setHandleAudioBecomingNoisy(intent.getBooleanExtra("pause", true))
+            LISTENING_EFFECT -> {
+                val choice = intent.getStringExtra("mode") ?: "Original"
+                listeningEffects.mode = choice.takeIf { it in listOf("Original", "8D", "16D", "Lo-fi", "Reverb") } ?: "Original"
+                getSharedPreferences("session", MODE_PRIVATE).edit().putString("listeningEffect", listeningEffects.mode).apply()
+            }
             WIDGET_PREVIOUS -> {
                 val count = player.mediaItemCount
                 if (count > 1) player.seekToDefaultPosition((player.currentMediaItemIndex.coerceAtLeast(0) - 1 + count) % count)

@@ -4,6 +4,8 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.appwidget.AppWidgetManager
 import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.RingtoneManager
 import android.media.audiofx.Visualizer
 import android.media.AudioDeviceInfo
 import android.content.ComponentName
@@ -16,6 +18,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -56,10 +59,17 @@ class MainActivity : ComponentActivity() {
     private var beatAverage = 0.0
     private val bandAverage = DoubleArray(9)
     private val bandLevels = DoubleArray(9)
+    private val audioCutter by lazy { AudioCutter(this) }
+    private var clipPreview: MediaPlayer? = null
+    private var clipPreviewStop: Runnable? = null
+    private var pendingRingtoneUri: Uri? = null
+    private var pendingClip: Triple<String, Long, Long>? = null
+    private var pendingClipRingtone = false
 
     private lateinit var permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private lateinit var notificationLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private lateinit var beatPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
+    private lateinit var clipPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -96,6 +106,12 @@ class MainActivity : ComponentActivity() {
         notificationLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
         beatPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
             if (allowed) maybeStartBeatVisualizer()
+        }
+        clipPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
+            val selection = pendingClip
+            pendingClip = null
+            if (allowed && selection != null) exportClipInternal(selection.first, selection.second, selection.third, pendingClipRingtone)
+            else clipResult("Storage access is needed to save the clip", false)
         }
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -501,7 +517,94 @@ class MainActivity : ComponentActivity() {
         pushPlayerState()
     }
 
+    private fun clipResult(message: String, success: Boolean) {
+        if (webReady) webView.evaluateJavascript(
+            "window.nativeClipResult && window.nativeClipResult(${JSONObject.quote(message)},${success})", null)
+    }
+
+    private fun stopClipPreview() {
+        clipPreviewStop?.let(handler::removeCallbacks)
+        clipPreviewStop = null
+        clipPreview?.let { try { it.stop(); it.release() } catch (_: Exception) { it.release() } }
+        clipPreview = null
+    }
+
+    private fun setAsRingtone(uri: Uri) {
+        if (!Settings.System.canWrite(this)) {
+            pendingRingtoneUri = uri
+            clipResult("Clip saved. Allow system settings access to set it as your ringtone.", true)
+            startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
+            return
+        }
+        try {
+            RingtoneManager.setActualDefaultRingtoneUri(this, RingtoneManager.TYPE_RINGTONE, uri)
+            pendingRingtoneUri = null
+            clipResult("Saved and set as your ringtone", true)
+        } catch (error: Exception) {
+            clipResult("Clip saved. Set it as your ringtone from phone settings.", true)
+        }
+    }
+
+    private fun exportClipInternal(id: String, fromMs: Long, toMs: Long, ringtone: Boolean) {
+        val song = songs.firstOrNull { it.id.toString() == id }
+        if (song == null) { clipResult("This song is no longer available", false); return }
+        stopClipPreview()
+        audioCutter.export(song, fromMs, toMs) { result ->
+            result.onSuccess { uri ->
+                if (ringtone) setAsRingtone(uri)
+                else clipResult("Clip saved in Ringtones / A S Music", true)
+                scanLibrary()
+            }.onFailure { error -> clipResult("Could not export this audio: ${error.message ?: "unsupported file"}", false) }
+        }
+    }
+
     inner class NativeBridge {
+        @JavascriptInterface
+        fun setListeningEffect(mode: String) {
+            startService(Intent(this@MainActivity, MusicService::class.java).apply {
+                action = MusicService.LISTENING_EFFECT
+                putExtra("mode", mode)
+            })
+        }
+
+        @JavascriptInterface
+        fun previewClip(id: String, fromMs: Long, toMs: Long) = runOnUiThread {
+            val song = songs.firstOrNull { it.id.toString() == id } ?: return@runOnUiThread
+            stopClipPreview()
+            controller?.pause()
+            try {
+                val preview = MediaPlayer()
+                clipPreview = preview
+                preview.setDataSource(this@MainActivity, song.uri)
+                preview.setOnPreparedListener { playing ->
+                    if (clipPreview !== playing) return@setOnPreparedListener
+                    playing.setOnSeekCompleteListener { ready ->
+                        if (clipPreview === ready) {
+                            ready.start()
+                            val stop = Runnable { if (clipPreview === ready) stopClipPreview() }
+                            clipPreviewStop = stop
+                            handler.postDelayed(stop, (toMs - fromMs).coerceAtLeast(100L))
+                        }
+                    }
+                    playing.seekTo(fromMs.coerceAtLeast(0L), MediaPlayer.SEEK_CLOSEST)
+                }
+                preview.setOnErrorListener { _, _, _ -> stopClipPreview(); clipResult("Could not preview this song", false); true }
+                preview.prepareAsync()
+            } catch (_: Exception) { stopClipPreview(); clipResult("Could not preview this song", false) }
+        }
+
+        @JavascriptInterface
+        fun stopClipPreview() = runOnUiThread { this@MainActivity.stopClipPreview() }
+
+        @JavascriptInterface
+        fun exportClip(id: String, fromMs: Long, toMs: Long, ringtone: Boolean) = runOnUiThread {
+            if (Build.VERSION.SDK_INT <= 28 &&
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                pendingClip = Triple(id, fromMs, toMs)
+                pendingClipRingtone = ringtone
+                clipPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            } else exportClipInternal(id, fromMs, toMs, ringtone)
+        }
         @JavascriptInterface
         fun getLibrary(): String = libraryJson
 
@@ -779,10 +882,12 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (beatRequested) maybeStartBeatVisualizer()
+        pendingRingtoneUri?.let { if (Settings.System.canWrite(this)) setAsRingtone(it) }
     }
 
     override fun onDestroy() {
         handler.removeCallbacks(poll)
+        stopClipPreview()
         releaseBeatVisualizer()
         controller?.removeListener(playerListener)
         controllerFuture?.let(MediaController::releaseFuture)

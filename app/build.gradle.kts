@@ -12,8 +12,8 @@ android {
         applicationId = "com.auraplayer.offline"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "16.0"
+        versionCode = 17
+        versionName = "17.0"
     }
     signingConfigs {
         create("personal") {
@@ -45,6 +45,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-session:$media3")
     implementation("androidx.media3:media3-common:$media3")
+    implementation("androidx.media3:media3-transformer:$media3")
     implementation("androidx.room:room-runtime:2.7.2")
     implementation("androidx.room:room-ktx:2.7.2")
     ksp("androidx.room:room-compiler:2.7.2")
