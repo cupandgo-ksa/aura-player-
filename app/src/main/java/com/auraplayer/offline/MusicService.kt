@@ -142,7 +142,7 @@ class MusicService : MediaSessionService() {
             HEADPHONES -> player.setHandleAudioBecomingNoisy(intent.getBooleanExtra("pause", true))
             LISTENING_EFFECT -> {
                 val choice = intent.getStringExtra("mode") ?: "Original"
-                listeningEffects.mode = choice.takeIf { it in listOf("Original", "8D", "16D", "Lo-fi", "Reverb") } ?: "Original"
+                listeningEffects.mode = choice.takeIf { it in listOf("Original", "8D", "16D", "3D Surround", "Wide Stereo", "Bass Boost", "Deep Bass", "Lo-fi", "Reverb", "Mono") } ?: "Original"
                 getSharedPreferences("session", MODE_PRIVATE).edit().putString("listeningEffect", listeningEffects.mode).apply()
             }
             WIDGET_PREVIOUS -> {
