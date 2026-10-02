@@ -35,6 +35,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -483,6 +484,7 @@ class MainActivity : ComponentActivity() {
             .put("shuffle", p.shuffleModeEnabled)
             .put("repeat", repeat)
             .put("speed", p.playbackParameters.speed)
+            .put("pitch", p.playbackParameters.pitch)
             .put("queueCount", p.mediaItemCount)
             .toString()
         val quoted = JSONObject.quote(json)
@@ -706,7 +708,23 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun setSpeed(speed: Double) {
             runOnUiThread {
-                controller?.setPlaybackSpeed(speed.toFloat().coerceIn(0.5f, 2.0f))
+                controller?.let { p ->
+                    p.playbackParameters = PlaybackParameters(
+                        speed.toFloat().coerceIn(0.5f, 2.0f),
+                        p.playbackParameters.pitch.coerceIn(0.5f, 2.0f)
+                    )
+                }
+                pushPlayerState()
+            }
+        }
+
+        @JavascriptInterface
+        fun setPlaybackTuning(speed: Double, pitch: Double) {
+            runOnUiThread {
+                controller?.playbackParameters = PlaybackParameters(
+                    speed.toFloat().coerceIn(0.5f, 2.0f),
+                    pitch.toFloat().coerceIn(0.5f, 2.0f)
+                )
                 pushPlayerState()
             }
         }
