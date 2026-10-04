@@ -46,17 +46,17 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: google_apis
+          target: aosp_atd
           arch: x86_64
           profile: pixel_2
-          disk-size: 2048M
-          ram-size: 2048M
+          disk-size: 1024M
+          ram-size: 1536M
           heap-size: 256M
           sdcard-path-or-size: 64M
           emulator-boot-timeout: 480
-          pre-emulator-launch-script: sed -i 's/^disk\.dataPartition\.size=.*/disk.dataPartition.size=2048M/' "$ANDROID_AVD_HOME/test.avd/config.ini"
+          pre-emulator-launch-script: sed -i 's/^disk\.dataPartition\.size=.*/disk.dataPartition.size=1024M/' "$ANDROID_AVD_HOME/test.avd/config.ini"
           disable-animations: true
-          emulator-options: -partition-size 2048 -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -camera-back none
+          emulator-options: -partition-size 1024 -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -camera-back none
           script: bash .github/scripts/playback-smoke.sh && bash .github/scripts/video-smoke.sh
       - uses: actions/upload-artifact@v4
         if: always()
