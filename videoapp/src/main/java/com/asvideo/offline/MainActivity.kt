@@ -48,6 +48,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -728,7 +729,7 @@ class MainActivity : ComponentActivity() {
                             android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT,
                             CaptionStyleCompat.EDGE_TYPE_OUTLINE, android.graphics.Color.BLACK, null))
                     }
-                }, modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = zoom; scaleY = zoom })
+                }, modifier = Modifier.fillMaxSize().clipToBounds().graphicsLayer { scaleX = zoom; scaleY = zoom })
                 if (loading) CircularProgressIndicator(Modifier.align(Alignment.Center).size(38.dp), color = Aqua)
                 if (!pip) {
                     var dragStartX by remember { mutableFloatStateOf(0f) }
