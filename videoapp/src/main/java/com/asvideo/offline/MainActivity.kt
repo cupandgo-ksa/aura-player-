@@ -119,6 +119,9 @@ class MainActivity : ComponentActivity() {
     private var theme by mutableStateOf("dark")
     private var subtitleSize by mutableFloatStateOf(.0533f)
     private var subtitleYellow by mutableStateOf(false)
+    private var subtitleDelay by mutableIntStateOf(0)
+    private var originalSubtitle: Uri? = null
+    private var soundMode by mutableStateOf("Off")
     private var zoom by mutableFloatStateOf(1f)
     private var backgroundAudio by mutableStateOf(true)
     private var playbackError by mutableStateOf("")
@@ -178,6 +181,7 @@ class MainActivity : ComponentActivity() {
     private val pickSubtitle = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            originalSubtitle = uri; subtitleDelay = 0
             subtitleUri = uri
             reloadWithSubtitle()
         }
@@ -192,10 +196,11 @@ class MainActivity : ComponentActivity() {
         backgroundAudio = prefs.getBoolean("backgroundAudio", true)
         subtitleSize = prefs.getFloat("subtitleSize", .0533f)
         subtitleYellow = prefs.getBoolean("subtitleYellow", false)
+        soundMode = prefs.getString("soundMode", "Off") ?: "Off"
         vault.clearCache()
         connect()
         requestLibraryPermission()
-        setContent { MaterialTheme(colorScheme = darkColorScheme(primary = Aqua, onSurface = Ink, surface = Dark)) { App() } }
+        setContent { MaterialTheme(colorScheme = if (theme == "light") lightColorScheme(primary = Color(0xFF168BB5), onSurface = Ink, surface = Color(0xFFF0F8FF)) else darkColorScheme(primary = Aqua, onSurface = Ink, surface = Dark)) { App() } }
         intent?.let(::handleOpenIntent)
         lifecycleScope.launch {
             while (isActive) {
@@ -247,6 +252,13 @@ class MainActivity : ComponentActivity() {
                     }
                     Log.d("ASVideoTest", if (vaultOk) "VIDEO_VAULT_PASS" else "VIDEO_VAULT_FAIL")
                 }
+                val subtitleOk = withContext(Dispatchers.IO) {
+                    val source = java.io.File(cacheDir, "timing_test.srt").apply { writeText("1\n00:00:01,000 --> 00:00:03,000\nCaption\n") }
+                    val adjusted = SubtitleTiming.shift(this@MainActivity, Uri.fromFile(source), "srt", 500)
+                    java.io.File(adjusted.path!!).readText().contains("00:00:01,500 --> 00:00:03,500") &&
+                        source.readText().contains("00:00:01,000")
+                }
+                Log.d("ASVideoTest", if (subtitleOk) "VIDEO_SUBTITLE_PASS" else "VIDEO_SUBTITLE_FAIL")
                 startSleep(5); startSleep(0)
                 Log.d("ASVideoTest", if (prefs.getLong("sleepDeadline", -1) == 0L) "VIDEO_TIMER_PASS" else "VIDEO_TIMER_FAIL")
                 theme = "light"; delay(600); theme = "dark"
@@ -280,7 +292,9 @@ class MainActivity : ComponentActivity() {
         override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             selected = library.firstOrNull { it.uri.toString() == mediaItem?.mediaId } ?: selected
-            subtitleUri = null
+            if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
+                subtitleUri = null; originalSubtitle = null; subtitleDelay = 0
+            }
             zoom = 1f
             if (!privatePlaying && selected != null) {
                 prefs.edit().putLong("watched_" + selected!!.uri, System.currentTimeMillis()).apply()
@@ -364,7 +378,7 @@ class MainActivity : ComponentActivity() {
     private fun playVideo(video: VideoEntry) {
         saveResume()
         if (privatePlaying) { controller?.stop(); privatePlaying = false; vault.clearCache(); window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
-        selected = video; playerOpen = true; controlsVisible = true; locked = false; subtitleUri = null
+        selected = video; playerOpen = true; controlsVisible = true; locked = false; subtitleUri = null; originalSubtitle = null; subtitleDelay = 0
         playbackError = ""; zoom = 1f
         prefs.edit().putLong("watched_" + video.uri, System.currentTimeMillis()).apply()
         val p = controller ?: run { pendingVideo = video; return }
@@ -387,6 +401,20 @@ class MainActivity : ComponentActivity() {
         p.seekTo(index, at)
         p.prepare()
         if (wasPlaying) p.play()
+    }
+
+    private fun adjustSubtitle(milliseconds: Int) {
+        val source = originalSubtitle
+        if (source == null) { playbackError = "Choose an external SRT or VTT subtitle first."; return }
+        val extension = (queryName(source) ?: source.toString()).substringAfterLast('.', "").lowercase()
+        if (extension != "srt" && extension != "vtt") { playbackError = "Timing adjustment supports external SRT and VTT subtitles."; return }
+        subtitleDelay = milliseconds.coerceIn(-10000, 10000)
+        lifecycleScope.launch {
+            try {
+                subtitleUri = withContext(Dispatchers.IO) { SubtitleTiming.shift(this@MainActivity, source, extension, subtitleDelay.toLong()) }
+                reloadWithSubtitle()
+            } catch (e: Exception) { playbackError = "Could not read this subtitle file." }
+        }
     }
 
     private fun saveResume() {
@@ -630,7 +658,20 @@ class MainActivity : ComponentActivity() {
         var bitmap by remember(video.uri) { mutableStateOf<Bitmap?>(null) }
         LaunchedEffect(video.uri) {
             bitmap = withContext(Dispatchers.IO) {
-                try { context.contentResolver.loadThumbnail(video.uri, Size(256, 160), null) } catch (_: Exception) { null }
+                try {
+                    if (Build.VERSION.SDK_INT >= 29 && video.uri.scheme == "content") context.contentResolver.loadThumbnail(video.uri, Size(256, 160), null)
+                    else {
+                        val retriever = android.media.MediaMetadataRetriever()
+                        try {
+                            retriever.setDataSource(context, video.uri)
+                            retriever.getFrameAtTime(0)?.let { frame ->
+                                val scaled = Bitmap.createScaledBitmap(frame, 256, (256f * frame.height / frame.width).toInt().coerceAtLeast(1), true)
+                                if (scaled !== frame) frame.recycle()
+                                scaled
+                            }
+                        } finally { retriever.release() }
+                    }
+                } catch (_: Exception) { null }
             }
         }
         Box(modifier.background(Brush.linearGradient(listOf(Color(0xFF548F9A), Color(0xFF243E56)))), contentAlignment = Alignment.Center) {
@@ -830,7 +871,7 @@ class MainActivity : ComponentActivity() {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(if (theme == "light") Color(0xFFF0F8FF) else Color(0xFF1B3440))
                 .verticalScroll(rememberScrollState()).padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(when (type) { "speed" -> "Playback speed"; "aspect" -> "Video fit"; "tracks" -> "Audio tracks"; "subtitles" -> "Subtitles"; "settings" -> "Settings"; "timer" -> "Sleep timer"; "vault" -> "Private videos"; else -> "Video options" },
+                    Text(when (type) { "speed" -> "Playback speed"; "aspect" -> "Video fit"; "tracks" -> "Audio tracks"; "subtitles" -> "Subtitles"; "settings" -> "Settings"; "sound" -> "Sound"; "timer" -> "Sleep timer"; "vault" -> "Private videos"; else -> "Video options" },
                         color = Ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     IconButton(onClick = { dialog = "" }) { Icon(Icons.Default.Close, "Close", tint = Muted) }
                 }
@@ -842,6 +883,13 @@ class MainActivity : ComponentActivity() {
                     "aspect" -> listOf("Fit" to AspectRatioFrameLayout.RESIZE_MODE_FIT, "Fill" to AspectRatioFrameLayout.RESIZE_MODE_FILL,
                         "Crop" to AspectRatioFrameLayout.RESIZE_MODE_ZOOM).forEach { (label, value) ->
                         OptionRow(label, resizeMode == value) { resizeMode = value; dialog = "" }
+                    }
+                    "sound" -> {
+                        Text("Equalizer presets use your device audio effects.", color = Muted, fontSize = 12.sp)
+                        if (!prefs.getBoolean("equalizerAvailable", false)) Text("Audio effects are unavailable for the current audio session.", color = Muted, fontSize = 12.sp)
+                        listOf("Off", "Bass", "Voice", "Movie").forEach { mode ->
+                            OptionRow(mode, soundMode == mode) { soundMode = mode; prefs.edit().putString("soundMode", mode).apply() }
+                        }
                     }
                     "settings" -> {
                         Text("Appearance", color = Muted, fontSize = 12.sp)
@@ -876,6 +924,12 @@ class MainActivity : ComponentActivity() {
                             onValueChangeFinished = { prefs.edit().putFloat("subtitleSize", subtitleSize).apply() })
                         OptionRow("Yellow subtitles", subtitleYellow) {
                             subtitleYellow = !subtitleYellow; prefs.edit().putBoolean("subtitleYellow", subtitleYellow).apply()
+                        }
+                        Text("External subtitle delay: " + subtitleDelay + " ms", color = Muted, fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { adjustSubtitle(subtitleDelay - 500) }) { Text("−0.5s") }
+                            TextButton(onClick = { adjustSubtitle(0) }) { Text("Reset") }
+                            TextButton(onClick = { adjustSubtitle(subtitleDelay + 500) }) { Text("+0.5s") }
                         }
                         OptionRow("Embedded subtitle tracks", false) { dialog = "tracks" }
                         OptionRow("Choose .srt / .vtt / .ass file", false) { dialog = ""; pickSubtitle.launch(arrayOf("*/*")) }
@@ -912,6 +966,7 @@ class MainActivity : ComponentActivity() {
                         OptionRow("Choose subtitles", false) { dialog = "subtitles" }
                         OptionRow("Playback speed", false) { dialog = "speed" }
                         OptionRow("Video fit", false) { dialog = "aspect" }
+                        OptionRow("Sound / Equalizer", false) { dialog = "sound" }
                         OptionRow("Audio and subtitle tracks", false) { dialog = "tracks" }
                         OptionRow("Reset zoom", zoom != 1f) { zoom = 1f; dialog = "" }
                         OptionRow("Sleep timer", sleepMinutes > 0) { dialog = "timer" }

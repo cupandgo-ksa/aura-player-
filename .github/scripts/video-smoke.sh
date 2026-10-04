@@ -20,7 +20,7 @@ adb exec-out screencap -p > video-smoke.png
 grep -q 'VIDEO_LIBRARY:1' video-smoke.log
 grep -q 'VIDEO_PLAY_PASS' video-smoke.log
 grep -q 'VIDEO_UI_PASS' video-smoke.log
-for check in PAUSE SEEK SPEED FAVORITE RESUME VAULT TIMER FULLSCREEN; do
+for check in PAUSE SEEK SPEED FAVORITE RESUME VAULT TIMER FULLSCREEN SUBTITLE; do
   grep -q "VIDEO_${check}_PASS" video-smoke.log
 done
 adb logcat -d -s AndroidRuntime:E > video-crash.log
