@@ -2,6 +2,7 @@ name: Build native music and video APKs
 on:
   push:
     branches: [main]
+    paths-ignore: ['.github/workflows/video-visual.yml']
   workflow_dispatch:
 permissions:
   contents: read

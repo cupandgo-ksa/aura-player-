@@ -1,30 +1,26 @@
 name: Validate video UI on a full Android device
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/video-visual.yml']
+  workflow_run:
+    workflows: ['Build native music and video APKs']
+    types: [completed]
   workflow_dispatch:
     inputs:
       build_run:
         description: 'Workflow run containing the A-S-Video-APK to inspect'
         required: true
-        default: '37214910595'
+        default: '37216647790'
 permissions:
   contents: read
-  actions: write
+  actions: read
+concurrency:
+  group: as-video-visual
+  cancel-in-progress: true
 jobs:
   visual:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Stop superseded validation runs
-        uses: actions/github-script@v8
-        with:
-          script: |
-            for (const run_id of [37215415528, 37215415556]) {
-              const {data: run} = await github.rest.actions.getWorkflowRun({...context.repo, run_id});
-              if (run.status !== 'completed') await github.rest.actions.cancelWorkflowRun({...context.repo, run_id});
-            }
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v5
         with:
@@ -33,7 +29,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: A-S-Video-APK
-          run-id: ${{ inputs.build_run || '37214910595' }}
+          run-id: ${{ github.event.workflow_run.id || inputs.build_run }}
           github-token: ${{ github.token }}
           path: videoapp/build/outputs/apk/debug
       - name: Free emulator disk space
@@ -55,20 +51,17 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 480
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -camera-back none -feature -Vulkan
-          script: bash .github/scripts/video-smoke.sh
-      - name: Capture diagnostics
-        if: always()
-        run: |
-          timeout 10 adb logcat -d > video-device-after.log || true
-          timeout 10 adb exec-out screencap -p > video-device-after.png || true
+          script: VISUAL_CHECK=1 bash .github/scripts/video-smoke.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: A-S-Video-Visual-Checks
           path: |
             video-smoke.png
+            video-fullscreen.png
             video-smoke.log
             video-crash.log
             video-device.log
             video-device.png
+            video-ui.xml
           if-no-files-found: ignore

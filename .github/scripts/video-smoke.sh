@@ -24,6 +24,30 @@ adb shell am start -n com.asvideo.offline/.MainActivity --activity-reorder-to-fr
 sleep 3
 adb logcat -d ASVideoTest:D ASVideo:E AndroidRuntime:E '*:S' > video-smoke.log
 cat video-smoke.log
+if [ "${VISUAL_CHECK:-0}" = "1" ]; then
+  adb shell uiautomator dump /sdcard/as-video-ui.xml
+  adb pull /sdcard/as-video-ui.xml video-ui.xml
+  read -r tap_x tap_y < <(python3 - <<'PY'
+import xml.etree.ElementTree as ET, re
+root=ET.parse("video-ui.xml").getroot()
+node=next(n for n in root.iter("node") if n.get("content-desc")=="Fullscreen")
+x1,y1,x2,y2=map(int,re.findall(r"-?\d+",node.get("bounds","")))
+print((x1+x2)//2,(y1+y2)//2)
+PY
+)
+  adb shell input tap "$tap_x" "$tap_y"
+  sleep 3
+  adb exec-out screencap -p > video-fullscreen.png
+  python3 - <<'PY'
+import struct
+data=open("video-fullscreen.png","rb").read()
+width,height=struct.unpack(">II",data[16:24])
+assert width>height,(width,height)
+print("VIDEO_VISUAL_FULLSCREEN_PASS")
+PY
+  adb shell input keyevent 4
+  sleep 3
+fi
 adb exec-out screencap -p > video-smoke.png
 grep -q 'VIDEO_LIBRARY:1' video-smoke.log
 grep -q 'VIDEO_PLAY_PASS' video-smoke.log
