@@ -266,6 +266,7 @@ class MainActivity : ComponentActivity() {
                 toggleFullscreen(); controlsVisible = true; delay(1500)
                 Log.d("ASVideoTest", if (fullscreen) "VIDEO_FULLSCREEN_PASS" else "VIDEO_FULLSCREEN_FAIL")
                 p.setPlaybackSpeed(1f)
+                toggleFullscreen(); controlsVisible = true
             }
         }
     }
@@ -705,7 +706,7 @@ class MainActivity : ComponentActivity() {
             }
             Box(Modifier.fillMaxWidth().then(if (fullscreen || pip) Modifier.weight(1f) else Modifier.aspectRatio(16f / 9f)).background(Color.Black)) {
                 AndroidView(factory = { context ->
-                    PlayerView(context).apply { useController = false; player = p; resizeMode = this@MainActivity.resizeMode; keepScreenOn = true }
+                    (android.view.LayoutInflater.from(context).inflate(R.layout.video_player, null) as PlayerView).apply { useController = false; player = p; resizeMode = this@MainActivity.resizeMode; keepScreenOn = true }
                 }, update = {
                     it.player = p; it.resizeMode = resizeMode; it.keepScreenOn = playing
                     it.subtitleView?.apply {
