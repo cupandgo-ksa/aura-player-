@@ -32,7 +32,10 @@ adb shell pm grant com.auraplayer.offline android.permission.RECORD_AUDIO
 adb logcat -c
 adb shell am force-stop com.auraplayer.offline
 adb shell am start -n com.auraplayer.offline/.MainActivity --ez smokeTest true
-sleep 22
+for attempt in $(seq 1 40); do
+  if adb logcat -d ASMusicTest:D '*:S' | grep -q 'SMOKE_CLIP_PASS'; then break; fi
+  sleep 3
+done
 adb logcat -d ASMusicTest:D '*:S' > playback-smoke.log
 cat playback-smoke.log
 grep -q 'SMOKE_LIBRARY:' playback-smoke.log

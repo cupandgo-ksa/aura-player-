@@ -5,6 +5,9 @@ import android.app.KeyguardManager
 import android.app.PictureInPictureParams
 import android.content.ComponentName
 import android.content.ContentUris
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -136,6 +139,14 @@ class MainActivity : ComponentActivity() {
     private var externalPicker = false
     private val vault by lazy { PrivateVault(this) }
     private var lastResumeSave = 0L
+    private var scanJob: Job? = null
+    private var refreshJob: Job? = null
+    private val mediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            refreshJob?.cancel()
+            refreshJob = lifecycleScope.launch { delay(350); scanVideos() }
+        }
+    }
     private val unlockVault = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         externalPicker = false
         if (result.resultCode == RESULT_OK) {
@@ -200,6 +211,7 @@ class MainActivity : ComponentActivity() {
         subtitleYellow = prefs.getBoolean("subtitleYellow", false)
         soundMode = prefs.getString("soundMode", "Off") ?: "Off"
         vault.clearCache()
+        contentResolver.registerContentObserver(Uri.parse("content://media"), true, mediaObserver)
         connect()
         requestLibraryPermission()
         setContent { MaterialTheme(colorScheme = if (theme == "light") lightColorScheme(primary = Color(0xFF168BB5), onSurface = Ink, surface = Color(0xFFF0F8FF)) else darkColorScheme(primary = Aqua, onSurface = Ink, surface = Dark)) { App() } }
@@ -221,7 +233,8 @@ class MainActivity : ComponentActivity() {
         }
         if (intent.getBooleanExtra("smokeTest", false) && (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             lifecycleScope.launch {
-                delay(3000)
+                val readyUntil = System.currentTimeMillis() + 30000
+                while ((library.isEmpty() || controller == null) && System.currentTimeMillis() < readyUntil) { delay(500) }
                 Log.d("ASVideoTest", "VIDEO_LIBRARY:" + library.size)
                 if (library.isNotEmpty()) playVideo(library[0])
                 delay(7000)
@@ -273,8 +286,8 @@ class MainActivity : ComponentActivity() {
                 val backgroundPosition = p.currentPosition
                 moveTaskToBack(true); delay(1200)
                 Log.d("ASVideoTest", if (p.isPlaying && p.currentPosition > backgroundPosition) "VIDEO_BACKGROUND_PASS" else "VIDEO_BACKGROUND_FAIL")
-                startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-                delay(700); p.pause()
+                p.pause()
+                Log.d("ASVideoTest", "VIDEO_BACKGROUND_DONE")
                 theme = "light"; delay(600); theme = "dark"
                 toggleFullscreen(); controlsVisible = true; delay(1500)
                 Log.d("ASVideoTest", if (fullscreen) "VIDEO_FULLSCREEN_PASS" else "VIDEO_FULLSCREEN_FAIL")
@@ -351,7 +364,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun scanVideos() {
-        lifecycleScope.launch {
+        scanJob?.cancel()
+        scanJob = lifecycleScope.launch {
             val found = withContext(Dispatchers.IO) {
                 val result = mutableListOf<VideoEntry>()
                 val columns = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME,
@@ -374,6 +388,7 @@ class MainActivity : ComponentActivity() {
             }
             val merged = (opened + found).distinctBy { it.uri }
             library.clear(); library.addAll(merged)
+            Log.d("ASVideoTest", "VIDEO_SCAN:" + merged.size)
             controller?.currentMediaItem?.let { item -> selected = library.firstOrNull { it.uri.toString() == item.mediaId } ?: selected }
         }
     }
@@ -509,7 +524,16 @@ class MainActivity : ComponentActivity() {
         pip = isInPictureInPictureMode
     }
 
+    override fun onResume() {
+        super.onResume()
+        val full = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_EXTERNAL_STORAGE
+        val partial = Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+        if (ContextCompat.checkSelfPermission(this, full) == PackageManager.PERMISSION_GRANTED || partial) scanVideos()
+    }
+
     override fun onDestroy() {
+        contentResolver.unregisterContentObserver(mediaObserver)
+        refreshJob?.cancel(); scanJob?.cancel()
         saveResume()
         sleepJob?.cancel()
         controller?.removeListener(playerListener)
