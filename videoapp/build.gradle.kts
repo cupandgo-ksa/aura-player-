@@ -14,6 +14,15 @@ android {
         versionCode = 2
         versionName = "2.0"
     }
+    signingConfigs {
+        create("personalVideo") {
+            storeFile = file("../app/aura-debug.keystore")
+            storePassword = "android"
+            keyAlias = "aura"
+            keyPassword = "android"
+        }
+    }
+    buildTypes { getByName("debug") { signingConfig = signingConfigs.getByName("personalVideo") } }
     buildFeatures { compose = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }

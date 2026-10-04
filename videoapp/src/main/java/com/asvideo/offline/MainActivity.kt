@@ -32,8 +32,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -736,36 +737,46 @@ class MainActivity : ComponentActivity() {
                             })
                         }
                         .pointerInput(p, locked) {
-                            detectTransformGestures { _, _, factor, _ ->
-                                if (!locked && factor != 1f) zoom = (zoom * factor).coerceIn(1f, 4f)
-                            }
-                        }
-                        .pointerInput(p, locked) {
-                            detectDragGestures(onDragStart = {
-                                dragStartX = it.x; dragX = 0f; dragY = 0f; dragAxis = 0
+                            awaitEachGesture {
+                                val first = awaitFirstDown(requireUnconsumed = false)
+                                dragStartX = first.position.x; dragX = 0f; dragY = 0f; dragAxis = 0
                                 dragPosition = p?.currentPosition ?: 0
                                 dragVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
                                 dragBrightness = window.attributes.screenBrightness.takeIf { b -> b >= 0 } ?: .5f
-                            }, onDragEnd = { gestureText = "" }, onDragCancel = { gestureText = "" }) { change, amount ->
-                                if (locked) return@detectDragGestures
-                                change.consume(); dragX += amount.x; dragY += amount.y
-                                if (dragAxis == 0 && kotlin.math.abs(dragX) + kotlin.math.abs(dragY) > 12) {
-                                    dragAxis = if (kotlin.math.abs(dragX) > kotlin.math.abs(dragY)) 1 else 2
-                                }
-                                if (dragAxis == 1) {
-                                    val next = (dragPosition + (dragX / size.width * 120000).toLong()).coerceIn(0, duration.coerceAtLeast(0))
-                                    p?.seekTo(next); gestureText = "Seek  " + time(next)
-                                } else if (dragAxis == 2 && dragStartX < size.width / 2) {
-                                    val attrs = window.attributes
-                                    attrs.screenBrightness = (dragBrightness - dragY / size.height).coerceIn(.02f, 1f)
-                                    window.attributes = attrs
-                                    gestureText = "Brightness  " + (attrs.screenBrightness * 100).toInt() + "%"
-                                } else if (dragAxis == 2) {
-                                    val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-                                    val level = (dragVolume - dragY / size.height * max).toInt().coerceIn(0, max)
-                                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, level, 0)
-                                    gestureText = "Volume  " + (level * 100 / max) + "%"
-                                }
+                                var pinching = false
+                                do {
+                                    val event = awaitPointerEvent()
+                                    if (!locked) {
+                                        if (event.changes.count { it.pressed } > 1) {
+                                            pinching = true
+                                            zoom = (zoom * event.calculateZoom()).coerceIn(1f, 4f)
+                                            event.changes.forEach { it.consume() }
+                                        } else if (!pinching) {
+                                            val change = event.changes.first()
+                                            val amount = change.position - change.previousPosition
+                                            dragX += amount.x; dragY += amount.y
+                                            if (dragAxis == 0 && kotlin.math.abs(dragX) + kotlin.math.abs(dragY) > viewConfiguration.touchSlop) {
+                                                dragAxis = if (kotlin.math.abs(dragX) > kotlin.math.abs(dragY)) 1 else 2
+                                            }
+                                            if (dragAxis != 0) change.consume()
+                                            if (dragAxis == 1) {
+                                                val next = (dragPosition + (dragX / size.width * 120000).toLong()).coerceIn(0, duration.coerceAtLeast(0))
+                                                p?.seekTo(next); gestureText = "Seek  " + time(next)
+                                            } else if (dragAxis == 2 && dragStartX < size.width / 2) {
+                                                val attrs = window.attributes
+                                                attrs.screenBrightness = (dragBrightness - dragY / size.height).coerceIn(.02f, 1f)
+                                                window.attributes = attrs
+                                                gestureText = "Brightness  " + (attrs.screenBrightness * 100).toInt() + "%"
+                                            } else if (dragAxis == 2) {
+                                                val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                                                val level = (dragVolume - dragY / size.height * max).toInt().coerceIn(0, max)
+                                                audio.setStreamVolume(AudioManager.STREAM_MUSIC, level, 0)
+                                                gestureText = "Volume  " + (level * 100 / max) + "%"
+                                            }
+                                        }
+                                    }
+                                } while (event.changes.any { it.pressed })
+                                gestureText = ""
                             }
                         })
                     if (gestureText.isNotEmpty()) Text(gestureText, color = Ink, modifier = Modifier.align(Alignment.Center).clip(RoundedCornerShape(20.dp))
