@@ -262,6 +262,18 @@ class MainActivity : ComponentActivity() {
                 Log.d("ASVideoTest", if (subtitleOk) "VIDEO_SUBTITLE_PASS" else "VIDEO_SUBTITLE_FAIL")
                 startSleep(5); startSleep(0)
                 Log.d("ASVideoTest", if (prefs.getLong("sleepDeadline", -1) == 0L) "VIDEO_TIMER_PASS" else "VIDEO_TIMER_FAIL")
+                val oldVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+                val maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val testVolume = if (oldVolume > 0) oldVolume - 1 else 1.coerceAtMost(maxVolume)
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, testVolume, 0); delay(200)
+                Log.d("ASVideoTest", if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) == testVolume) "VIDEO_VOLUME_PASS" else "VIDEO_VOLUME_FAIL")
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, oldVolume, 0)
+                p.setPlaybackSpeed(1f); p.play(); delay(500)
+                val backgroundPosition = p.currentPosition
+                moveTaskToBack(true); delay(1200)
+                Log.d("ASVideoTest", if (p.isPlaying && p.currentPosition > backgroundPosition) "VIDEO_BACKGROUND_PASS" else "VIDEO_BACKGROUND_FAIL")
+                startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                delay(700); p.pause()
                 theme = "light"; delay(600); theme = "dark"
                 toggleFullscreen(); controlsVisible = true; delay(1500)
                 Log.d("ASVideoTest", if (fullscreen) "VIDEO_FULLSCREEN_PASS" else "VIDEO_FULLSCREEN_FAIL")
