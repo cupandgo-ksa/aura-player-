@@ -11,11 +11,20 @@ on:
         default: '37214910595'
 permissions:
   contents: read
-  actions: read
+  actions: write
 jobs:
   visual:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
+      - name: Stop superseded validation runs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            for (const run_id of [37215415528, 37215415556]) {
+              const {data: run} = await github.rest.actions.getWorkflowRun({...context.repo, run_id});
+              if (run.status !== 'completed') await github.rest.actions.cancelWorkflowRun({...context.repo, run_id});
+            }
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v5
         with:
@@ -45,13 +54,13 @@ jobs:
           sdcard-path-or-size: 128M
           disable-animations: true
           emulator-boot-timeout: 480
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -camera-back none -feature -Vulkan
           script: bash .github/scripts/video-smoke.sh
       - name: Capture diagnostics
         if: always()
         run: |
-          adb logcat -d > video-device.log || true
-          adb exec-out screencap -p > video-device.png || true
+          timeout 10 adb logcat -d > video-device-after.log || true
+          timeout 10 adb exec-out screencap -p > video-device-after.png || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

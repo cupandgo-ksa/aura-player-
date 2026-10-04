@@ -1,4 +1,6 @@
 set -euo pipefail
+trap 'adb logcat -d > video-device.log 2>/dev/null || true; adb exec-out screencap -p > video-device.png 2>/dev/null || true' EXIT
+adb shell setprop debug.hwui.renderer skiagl || true
 adb install -r videoapp/build/outputs/apk/debug/videoapp-debug.apk
 for attempt in 1 2 3 4 5; do
   adb shell mkdir -p /sdcard/Movies/ASVideoSmoke || true
@@ -12,7 +14,7 @@ adb shell content query --uri content://media/external/video/media --projection 
 adb shell pm grant com.asvideo.offline android.permission.READ_MEDIA_VIDEO
 adb shell pm grant com.asvideo.offline android.permission.POST_NOTIFICATIONS || true
 adb logcat -c
-adb shell am start -W -n com.asvideo.offline/.MainActivity --ez smokeTest true
+adb shell am start -n com.asvideo.offline/.MainActivity --ez smokeTest true
 for attempt in $(seq 1 20); do
   if adb logcat -d ASVideoTest:D '*:S' | grep -q 'VIDEO_FULLSCREEN_PASS'; then break; fi
   sleep 3
