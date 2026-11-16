@@ -12,8 +12,8 @@ android {
         applicationId = "com.auraplayer.offline"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "17.0"
+        versionCode = 18
+        versionName = "18.0"
     }
     signingConfigs {
         create("personal") {
@@ -52,3 +52,4 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
+
